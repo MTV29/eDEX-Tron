@@ -33,10 +33,12 @@ def column(width, *panels, spacing=8):
     for p in panels:
         box.append(p)
     # A Box hands out natural widths before sharing the spare space, so long
-    # labels would widen a side column. A non-scrolling ScrolledWindow reports
-    # only its minimum width, which pins the column to `width`.
+    # labels would widen a side column. A ScrolledWindow reports only its
+    # minimum width, which pins the column to `width`; vertically it scrolls
+    # when the screen is too short for every panel (laptops, small windows).
     clamp = Gtk.ScrolledWindow(hexpand=False, vexpand=True)
-    clamp.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)
+    clamp.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    clamp.set_overlay_scrolling(True)
     clamp.set_size_request(width, -1)
     clamp.set_child(box)
     return clamp
@@ -54,7 +56,8 @@ class HudWindow(Gtk.ApplicationWindow):
         if windowed:
             self.add_css_class('opaque')
             self.set_title('eDEX-Tron')
-            w, h = min(geo.width, 1600), min(geo.height - 80, 960)
+            # fit comfortably on the screen it opens on
+            w, h = int(geo.width * 0.9), int(geo.height * 0.85)
         else:
             self.set_title(f'{TITLE} @{geo.x},{geo.y}')
             self.set_decorated(False)
@@ -93,7 +96,7 @@ class HudWindow(Gtk.ApplicationWindow):
         self.files = a(Filesystem(self.shell))
         desk = a(Desktop())
         bottom = Gtk.Box(spacing=gap, homogeneous=True)
-        bottom.set_size_request(-1, int(h * 0.30))
+        bottom.set_size_request(-1, max(150, int(h * 0.28)))
         bottom.append(self.files)
         bottom.append(desk)
         centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=gap, hexpand=True)
