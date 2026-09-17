@@ -30,7 +30,7 @@ fi
 
 MONITOR_ARGS=""
 for m in ${MONITORS:-1920x1080}; do MONITOR_ARGS="$MONITOR_ARGS --virtual-monitor $m"; done
-export OUT SCENARIO MODE EXT_MODE MONITOR_ARGS
+export OUT SCENARIO MODE EXT_MODE MONITOR_ARGS RELEASE_TGZ
 dbus-run-session -- bash -c '
   if [ "${EXT_MODE:-source}" = system ]; then
     gsettings set org.gnome.shell enabled-extensions "[\"shell-harness@edex-tron.test\"]"
