@@ -1,0 +1,25 @@
+# eDEX-Tron dock -- one app per line:   Label | target [| icon]
+#
+# Setup copies this to ~/.config/edex-tron/dock.txt; edit that file (or click
+# "+ EDIT" on the dock) and the dock rebuilds when you save.
+#
+# target:
+#   app.desktop,other.desktop   an installed app (first one found is used;
+#                               list them with: ls /usr/share/applications
+#                               /var/lib/snapd/desktop/applications)
+#   !command args               run a program directly
+#   ~/folder, /path, https://…  open with the default app
+# icon (optional): an icon name, or a path to an image.
+# Entries that aren't installed are skipped, so listing extra apps is fine.
+
+Files      | org.gnome.Nautilus.desktop
+Terminal   | org.gnome.Ptyxis.desktop,org.gnome.Terminal.desktop
+Firefox    | firefox_firefox.desktop,firefox.desktop
+Chrome     | google-chrome.desktop,chromium_chromium.desktop
+Code       | code_code.desktop,code.desktop
+Text       | org.gnome.TextEditor.desktop,org.gnome.gedit.desktop
+Monitor    | io.missioncenter.MissionCenter.desktop,net.nokyan.Resources.desktop,org.gnome.SystemMonitor.desktop
+Software   | snap-store_snap-store.desktop,io.snapcraft.Store.desktop,org.gnome.Software.desktop
+Settings   | org.gnome.Settings.desktop
+eDEX-UI    | edex-ui.desktop,appimagekit-edex-ui.desktop
+Theme      | !edex-tron toggle | edex-tron

@@ -1,0 +1,6 @@
+{
+  "uuid": "shell-harness@edex-tron.test",
+  "name": "eDEX-Tron test harness",
+  "description": "TEST ONLY - never shipped. Lets the test scripts take screenshots and inspect windows in a headless GNOME Shell.",
+  "shell-version": ["50"]
+}

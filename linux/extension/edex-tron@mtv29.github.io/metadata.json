@@ -1,0 +1,10 @@
+{
+  "uuid": "edex-tron@mtv29.github.io",
+  "name": "eDEX-Tron",
+  "description": "Desktop HUD, effects and hotkeys for the eDEX-Tron theme, based on eDEX-UI by Gabriel \"Squared\" Saillard.\n\nKeeps the eDEX-Tron HUD on the desktop behind your windows. It stays enabled on the lock screen so that the HUD's terminal sessions survive locking.",
+  "shell-version": ["50"],
+  "session-modes": ["user", "unlock-dialog"],
+  "settings-schema": "org.gnome.shell.extensions.edex-tron",
+  "url": "https://github.com/MTV29/eDEX-Tron",
+  "version-name": "0.8.0"
+}

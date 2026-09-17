@@ -38,3 +38,16 @@ own licences; eDEX-Tron does not include them.
 - [Pillow](https://python-pillow.org/), [NumPy](https://numpy.org/),
   [fontTools](https://github.com/fonttools/fonttools) — installed with `pip`
 - [Windhawk](https://windhawk.net/) — optional, installed by you
+
+## Linux edition
+
+- The GNOME Shell extension keeps the HUD on the desktop layer using the
+  technique from **[Desktop Icons NG](https://gitlab.com/rastersoft/desktop-icons-ng)**
+  by Sergio Costas (GPL-3.0). No code is copied; the approach is credited.
+- The package depends on software installed from Ubuntu's archive under its
+  own licence: GTK 4 and VTE (LGPL), PyGObject (LGPL), psutil (BSD),
+  Pillow (MIT-CMU), NumPy (BSD), and optionally starship (ISC),
+  fastfetch (MIT), btop (Apache-2.0), tmux (ISC), qt6ct (BSD-2-Clause),
+  GRUB (GPL-3.0) and Plymouth (GPL-2.0).
+- The GRUB theme's fonts are converted at install time from the system's
+  DejaVu Sans Mono (Bitstream Vera licence); none are shipped.

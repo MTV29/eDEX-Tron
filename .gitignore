@@ -32,6 +32,9 @@ skins/eDEX-Tron/@Resources/Art/
 skins/eDEX-Tron/@Resources/Variables.inc
 skins/eDEX-Tron/@Resources/*.txt
 
+# Linux edition build output
+linux/build/
+
 # python
 __pycache__/
 *.pyc

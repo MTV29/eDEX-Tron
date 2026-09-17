@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="edex-tron">
+  <schema id="org.gnome.shell.extensions.edex-tron" path="/org/gnome/shell/extensions/edex-tron/">
+    <key name="hud-enabled" type="b">
+      <default>true</default>
+      <summary>Show the HUD on the desktop</summary>
+    </key>
+    <key name="hud-command" type="as">
+      <default>['edex-tron', 'hud']</default>
+      <summary>Command that starts the HUD</summary>
+    </key>
+    <key name="scanlines" type="b">
+      <default>false</default>
+      <summary>CRT scanlines over the whole screen</summary>
+      <description>A transparent overlay of fine lines above everything. Full-screen games can't bypass the compositor while it is on.</description>
+    </key>
+    <key name="scanline-strength" type="d">
+      <range min="0.0" max="0.6"/>
+      <default>0.18</default>
+      <summary>How dark the scanlines are</summary>
+    </key>
+    <key name="glow" type="b">
+      <default>true</default>
+      <summary>Glowing frame around the focused window</summary>
+    </key>
+    <key name="tv-animation" type="b">
+      <default>true</default>
+      <summary>CRT switch-on/off animation when windows open and close</summary>
+    </key>
+    <key name="accent" type="s">
+      <default>'#aacfd1'</default>
+      <summary>Accent colour (set by edex-tron theme)</summary>
+    </key>
+    <key name="shell-stylesheet" type="s">
+      <default>''</default>
+      <summary>Generated GNOME Shell stylesheet to load on top of the system theme</summary>
+    </key>
+    <key name="peek-hud" type="as">
+      <default><![CDATA[['<Super><Alt>h']]]></default>
+      <summary>Show the HUD (minimise windows); press again to bring them back</summary>
+    </key>
+    <key name="focus-terminal" type="as">
+      <default><![CDATA[['<Super><Alt>t']]]></default>
+      <summary>Show the HUD and focus its terminal</summary>
+    </key>
+    <key name="toggle-scanlines" type="as">
+      <default><![CDATA[['<Super><Alt>e']]]></default>
+      <summary>Switch the scanline effect on or off</summary>
+    </key>
+  </schema>
+</schemalist>

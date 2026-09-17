@@ -10,3 +10,7 @@
 *.jpg   binary
 *.ttf   binary
 *.exe   binary
+# the Linux edition runs on Linux: LF everywhere (listed last so it wins)
+linux/**        text eol=lf
+linux/**/*.png  binary
+linux/**/*.jpg  binary

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=eDEX-Tron HUD (window)
+Comment=Open the eDEX-Tron HUD in a normal window
+Exec=edex-tron hud --window
+Icon=edex-tron
+Terminal=false
+Categories=System;Monitor;
+Keywords=edex;tron;hud;monitor;terminal;

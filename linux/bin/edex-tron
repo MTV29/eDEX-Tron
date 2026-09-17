@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+"""eDEX-Tron command line. See `edex-tron --help`."""
+import os
+import sys
+
+# Installed: /usr/share/edex-tron; from a source checkout: <repo>/linux
+here = os.path.dirname(os.path.realpath(__file__))
+for candidate in ('/usr/share/edex-tron', os.path.dirname(here)):
+    if os.path.isdir(os.path.join(candidate, 'edex_tron')):
+        sys.path.insert(0, candidate)
+        break
+
+from edex_tron.cli import main  # noqa: E402
+
+sys.exit(main())

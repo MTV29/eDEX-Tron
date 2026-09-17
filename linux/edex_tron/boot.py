@@ -1,0 +1,471 @@
+"""Boot menu (GRUB) and boot splash (Plymouth) themes. Needs root.
+
+`edex-tron boot install|remove` re-runs this module through sudo/pkexec with
+just the two colours, so nothing from the user's home is read as root.
+
+Safety: GRUB and Plymouth both fall back to their plain defaults if a theme
+fails to load, so a broken theme can't stop the machine booting. Encrypted
+disks still get a password prompt (the splash implements it).
+"""
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+
+from PIL import Image, ImageDraw, ImageFont
+
+from . import VERSION, shared_path
+from .config import mix, normalise_hex, rgb
+
+GRUB_DIR = '/boot/grub/themes/edex-tron'
+GRUB_CFG = '/etc/default/grub.d/99-edex-tron.cfg'
+PLY_DIR = '/usr/share/plymouth/themes/edex-tron'
+PLY_FILE = f'{PLY_DIR}/edex-tron.plymouth'
+PLY_LINK = '/usr/share/plymouth/themes/default.plymouth'
+STATE = '/var/lib/edex-tron/boot.json'
+MONO = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'
+MONO_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf'
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+class StepFailed(Exception):
+    pass
+
+
+def sh(*args, check=True):
+    log('  $ ' + ' '.join(args))
+    r = subprocess.run(args, text=True, capture_output=True)
+    if check and r.returncode:
+        tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
+        raise StepFailed(f'{args[0]} failed: ' + ' / '.join(tail))
+    return r
+
+
+# --- user side ---------------------------------------------------------------
+
+def request(action, accent, background, show_menu=False):
+    """Run the root helper for `action` (install/remove) via sudo or pkexec."""
+    exe = shutil.which('edex-tron') or os.path.abspath(sys.argv[0])
+    args = [exe, 'boot-root', action, '--accent', normalise_hex(accent),
+            '--background', normalise_hex(background)]
+    if show_menu:
+        args.append('--show-menu')
+    if os.geteuid() == 0:
+        return main_root(args[2:])
+    if sys.stdin.isatty() and shutil.which('sudo'):
+        cmd = ['sudo', *args]
+    elif shutil.which('pkexec'):
+        cmd = ['pkexec', *args]
+    else:
+        log('Needs admin rights: run this command with sudo.')
+        return 1
+    return subprocess.call(cmd)
+
+
+# --- rendering -------------------------------------------------------------------
+
+def _font(path, size):
+    try:
+        return ImageFont.truetype(path, size)
+    except OSError:
+        return ImageFont.load_default()
+
+
+def background(accent, bg, w=1920, h=1080, caption='eDEX  //  BOOT SEQUENCE'):
+    mw_path = shared_path('src', 'tools', 'make_wallpaper.py')
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('edex_wall', mw_path)
+    mw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mw)
+    img = Image.new('RGBA', (w, h), rgb(bg) + (255,))
+    th = mw.load_theme(shared_path('themes', 'edex', 'tron.json'))
+    th['accent'], th['light_black'] = rgb(accent), rgb(bg)
+    vh = h / 100
+    mw.draw_radar(img, th, vh, 1)
+    mw.draw_vignette(img, th)
+    d = ImageDraw.Draw(img)
+    mw.tick_frame(d, (3 * vh, 3 * vh, w - 3 * vh, h - 3 * vh), th, vh, alpha=150, arm=3)
+    d.text((w / 2, 5 * vh), caption, font=_font(MONO, int(2.2 * vh)),
+           fill=rgb(accent) + (220,), anchor='mt')
+    return img.convert('RGB')
+
+
+def _pf2_name(path):
+    """The font name GRUB wants in theme.txt, read from the PF2 NAME chunk."""
+    with open(path, 'rb') as f:
+        data = f.read(4096)
+    i = data.find(b'NAME')
+    if i < 0:
+        return None
+    (length,) = struct.unpack('>I', data[i + 4:i + 8])
+    return data[i + 8:i + 8 + length].rstrip(b'\0').decode()
+
+
+def build_grub(dest, accent, bg):
+    os.makedirs(dest, exist_ok=True)
+    background(accent, bg).save(os.path.join(dest, 'background.png'))
+    dim = mix(accent, bg, 0.45)
+    # selection bar: solid accent centre with brighter end caps
+    for part, colour in (('c', accent), ('w', mix(accent, '#ffffff', 0.4)), ('e', mix(accent, '#ffffff', 0.4))):
+        Image.new('RGB', (4 if part != 'c' else 16, 16), rgb(colour)).save(os.path.join(dest, f'select_{part}.png'))
+    for part in ('nw', 'n', 'ne', 'sw', 's', 'se'):
+        Image.new('RGBA', (4, 4), (0, 0, 0, 0)).save(os.path.join(dest, f'select_{part}.png'))
+    for part in ('c', 'n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'):
+        c = rgb(bg) if part == 'c' else rgb(dim)
+        Image.new('RGB', (8, 8) if part == 'c' else (2, 2), c).save(os.path.join(dest, f'terminal_box_{part}.png'))
+    names = {}
+    for key, src, size in (('item', MONO, 22), ('selected', MONO_BOLD, 22), ('small', MONO, 16), ('title', MONO_BOLD, 28)):
+        out = os.path.join(dest, f'{key}.pf2')
+        subprocess.run(['grub-mkfont', '-s', str(size), '-o', out, src], check=True)
+        names[key] = _pf2_name(out) or f'DejaVu Sans Mono Regular {size}'
+    theme = f'''# eDEX-Tron GRUB theme (generated by edex-tron {VERSION})
+# Based on eDEX-UI by Gabriel "Squared" Saillard. Remove with: edex-tron boot remove
+title-text: ""
+desktop-image: "background.png"
+desktop-color: "{bg}"
+terminal-font: "{names['small']}"
+terminal-box: "terminal_box_*.png"
+terminal-left: "10%"
+terminal-top: "12%"
+terminal-width: "80%"
+terminal-height: "76%"
+
++ label {{
+  top = 14%  left = 0  width = 100%  height = 40
+  align = "center"  font = "{names['title']}"  color = "{accent}"
+  text = "SELECT OPERATING SYSTEM"
+}}
++ boot_menu {{
+  left = 25%  top = 24%  width = 50%  height = 52%
+  item_font = "{names['item']}"
+  item_color = "{mix(accent, bg, 0.25)}"
+  selected_item_font = "{names['selected']}"
+  selected_item_color = "{bg}"
+  selected_item_pixmap_style = "select_*.png"
+  item_height = 44  item_padding = 18  item_spacing = 10
+  icon_width = 0  icon_height = 0  item_icon_space = 0
+  scrollbar = false
+}}
++ progress_bar {{
+  id = "__timeout__"
+  left = 25%  top = 80%  width = 50%  height = 4
+  fg_color = "{accent}"  bg_color = "{mix(accent, bg, 0.8)}"  border_color = "{bg}"
+  show_text = false
+}}
++ label {{
+  id = "__timeout__"
+  top = 82%  left = 0  width = 100%  height = 30
+  align = "center"  font = "{names['small']}"  color = "{dim}"
+  text = "AUTO BOOT IN %d s"
+}}
++ label {{
+  top = 92%  left = 0  width = 100%  height = 30
+  align = "center"  font = "{names['small']}"  color = "{dim}"
+  text = "UP/DOWN select    ENTER boot    E edit    C console"
+}}
+'''
+    with open(os.path.join(dest, 'theme.txt'), 'w') as f:
+        f.write(theme)
+
+
+PLY_SCRIPT = r'''# eDEX-Tron boot splash (generated by edex-tron @VERSION@)
+# Based on eDEX-UI by Gabriel "Squared" Saillard.
+
+Window.SetBackgroundTopColor(@BG@);
+Window.SetBackgroundBottomColor(@BG@);
+
+screen.w = Window.GetWidth();
+screen.h = Window.GetHeight();
+screen.x = Window.GetX();
+screen.y = Window.GetY();
+
+bg.image = Image("background.png");
+bg.sprite = Sprite(bg.image.Scale(screen.w, screen.h));
+bg.sprite.SetPosition(screen.x, screen.y, -100);
+
+logo.size = Math.Int(screen.h * 0.22);
+logo.image = Image("logo.png").Scale(logo.size, logo.size);
+logo.sprite = Sprite(logo.image);
+logo.x = screen.x + screen.w / 2 - logo.size / 2;
+logo.y = screen.y + screen.h * 0.40 - logo.size / 2;
+logo.sprite.SetPosition(logo.x, logo.y, 10);
+
+ring.size = Math.Int(logo.size * 1.45);
+ring.image = Image("ring.png").Scale(ring.size, ring.size);
+ring.sprite = Sprite(ring.image);
+ring.angle = 0;
+ring.sprite.SetPosition(screen.x + screen.w / 2 - ring.size / 2,
+                        screen.y + screen.h * 0.40 - ring.size / 2, 5);
+
+title.image = Image.Text("eDEX  //  SYSTEM BOOT", @ACCENT_F@, 1, "DejaVu Sans Mono Bold 18");
+title.sprite = Sprite(title.image);
+title.sprite.SetPosition(screen.x + screen.w / 2 - title.image.GetWidth() / 2,
+                         screen.y + screen.h * 0.64, 10);
+
+bar.w = Math.Int(screen.w * 0.30);
+bar.track = Image("bar.png").Scale(bar.w, 3);
+bar.track_sprite = Sprite(bar.track);
+bar.track_sprite.SetOpacity(0.25);
+bar.x = screen.x + screen.w / 2 - bar.w / 2;
+bar.y = screen.y + screen.h * 0.70;
+bar.track_sprite.SetPosition(bar.x, bar.y, 10);
+bar.fill = Image("bar.png");
+bar.sprite = Sprite();
+bar.sprite.SetPosition(bar.x, bar.y, 11);
+
+status.sprite = Sprite();
+status.sprite.SetPosition(bar.x, bar.y + 14, 10);
+
+fun refresh_callback () {
+  ring.angle = ring.angle + 0.035;
+  ring.sprite.SetImage(ring.image.Rotate(ring.angle));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+fun progress_callback (duration, progress) {
+  w = Math.Int(bar.w * progress);
+  if (w < 1) w = 1;
+  bar.sprite.SetImage(bar.fill.Scale(w, 3));
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+fun message_callback (text) {
+  status.sprite.SetImage(Image.Text(text, @DIM_F@, 1, "DejaVu Sans Mono 11"));
+}
+Plymouth.SetMessageFunction(message_callback);
+
+# --- password / question prompts (encrypted disks) -----------------------------
+prompt.sprite = Sprite();
+prompt.box = Sprite();
+bullets.sprite = Sprite();
+
+fun show_prompt (text, answer) {
+  box.image = Image("box.png").Scale(Math.Int(screen.w * 0.34), 90);
+  prompt.box.SetImage(box.image);
+  box.x = screen.x + screen.w / 2 - box.image.GetWidth() / 2;
+  box.y = screen.y + screen.h * 0.76;
+  prompt.box.SetPosition(box.x, box.y, 20);
+  prompt.box.SetOpacity(1);
+  label = Image.Text(text, @ACCENT_F@, 1, "DejaVu Sans Mono 12");
+  prompt.sprite.SetImage(label);
+  prompt.sprite.SetPosition(box.x + 16, box.y + 14, 21);
+  prompt.sprite.SetOpacity(1);
+  entry = Image.Text(answer + "_", @WHITE_F@, 1, "DejaVu Sans Mono 14");
+  bullets.sprite.SetImage(entry);
+  bullets.sprite.SetPosition(box.x + 16, box.y + 48, 21);
+  bullets.sprite.SetOpacity(1);
+}
+
+fun display_password_callback (prompt_text, count) {
+  stars = "";
+  i = 0;
+  while (i < count && i < 48) {
+    stars = stars + "*";
+    i = i + 1;
+  }
+  if (prompt_text == "") prompt_text = "PASSWORD";
+  show_prompt(prompt_text, stars);
+}
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+fun display_question_callback (prompt_text, entry) {
+  show_prompt(prompt_text, entry);
+}
+Plymouth.SetDisplayQuestionFunction(display_question_callback);
+
+fun display_normal_callback () {
+  prompt.box.SetOpacity(0);
+  prompt.sprite.SetOpacity(0);
+  bullets.sprite.SetOpacity(0);
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+fun quit_callback () {
+  logo.sprite.SetOpacity(1);
+}
+Plymouth.SetQuitFunction(quit_callback);
+'''
+
+
+def _script_colour(hex_colour):
+    r, g, b = rgb(hex_colour)
+    return f'{r / 255:.3f}, {g / 255:.3f}, {b / 255:.3f}'
+
+
+def build_plymouth(dest, accent, bg, final_dir=None):
+    """Render into dest; final_dir is where it will live (named in the theme file)."""
+    final_dir = final_dir or dest
+    os.makedirs(dest, exist_ok=True)
+    background(accent, bg, caption='').save(os.path.join(dest, 'background.png'))
+    icon = shared_path('assets', 'icon', 'edex-tron.png')
+    Image.open(icon).convert('RGBA').save(os.path.join(dest, 'logo.png'))
+    # a thin broken ring that spins around the logo
+    size = 512
+    ring = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(ring)
+    a = rgb(accent)
+    for start, length, width, alpha in ((0, 70, 6, 255), (120, 40, 4, 160), (200, 100, 3, 110), (320, 20, 6, 255)):
+        d.arc([12, 12, size - 12, size - 12], start, start + length, fill=a + (alpha,), width=width)
+    d.ellipse([40, 40, size - 40, size - 40], outline=a + (50,), width=2)
+    ring.save(os.path.join(dest, 'ring.png'))
+    Image.new('RGB', (8, 3), a).save(os.path.join(dest, 'bar.png'))
+    box = Image.new('RGBA', (32, 32), rgb(bg) + (235,))
+    ImageDraw.Draw(box).rectangle([0, 0, 31, 31], outline=a + (255,))
+    box.save(os.path.join(dest, 'box.png'))
+    script = (PLY_SCRIPT.replace('@VERSION@', VERSION)
+              .replace('@BG@', _script_colour(bg))
+              .replace('@ACCENT_F@', _script_colour(accent))
+              .replace('@DIM_F@', _script_colour(mix(accent, bg, 0.4)))
+              .replace('@WHITE_F@', _script_colour(mix(accent, '#ffffff', 0.7))))
+    with open(os.path.join(dest, 'edex-tron.script'), 'w') as f:
+        f.write(script)
+    with open(os.path.join(dest, 'edex-tron.plymouth'), 'w') as f:
+        f.write('[Plymouth Theme]\nName=eDEX-Tron\n'
+                'Description=eDEX-Tron boot splash, based on eDEX-UI\n'
+                'ModuleName=script\n\n[script]\n'
+                f'ImageDir={final_dir}\nScriptFile={final_dir}/edex-tron.script\n')
+
+
+# --- root side -------------------------------------------------------------------
+
+def _state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_state(s):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with open(STATE, 'w') as f:
+        json.dump(s, f, indent=2)
+
+
+def _alternative():
+    r = sh('update-alternatives', '--query', 'default.plymouth', check=False)
+    status = value = None
+    for line in r.stdout.splitlines():
+        if line.startswith('Status:'):
+            status = line.split(':', 1)[1].strip()
+        elif line.startswith('Value:'):
+            value = line.split(':', 1)[1].strip()
+    return status, value
+
+
+def install(accent, bg, show_menu):
+    try:
+        return _install(accent, bg, show_menu)
+    except (StepFailed, subprocess.CalledProcessError, OSError) as e:
+        log(f'Stopped: {e}')
+        log('Your machine still boots normally; run `edex-tron boot remove` to undo what was done.')
+        return 1
+
+
+def _install(accent, bg, show_menu):
+    state = _state()
+    if shutil.which('grub-mkconfig') and os.path.isdir('/boot/grub'):
+        log('Boot menu (GRUB):')
+        tmp = GRUB_DIR + '.new'
+        shutil.rmtree(tmp, ignore_errors=True)
+        build_grub(tmp, accent, bg)
+        shutil.rmtree(GRUB_DIR, ignore_errors=True)
+        os.replace(tmp, GRUB_DIR)
+        os.makedirs(os.path.dirname(GRUB_CFG), exist_ok=True)
+        lines = ['# added by eDEX-Tron; `edex-tron boot remove` deletes this file',
+                 f'GRUB_THEME="{GRUB_DIR}/theme.txt"', 'GRUB_GFXMODE="auto"']
+        if show_menu:
+            lines += ['GRUB_TIMEOUT_STYLE="menu"', 'GRUB_TIMEOUT="5"']
+        with open(GRUB_CFG, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
+        state['grub'] = True
+        _save_state(state)
+        if shutil.which('update-grub'):
+            sh('update-grub')
+    else:
+        log('GRUB not found; skipping the boot menu.')
+
+    if shutil.which('update-alternatives') and os.path.isdir('/usr/share/plymouth/themes'):
+        log('Boot splash (Plymouth):')
+        if 'plymouth_before' not in state:
+            state['plymouth_before'] = dict(zip(('status', 'value'), _alternative()))
+        tmp = PLY_DIR + '.new'
+        shutil.rmtree(tmp, ignore_errors=True)
+        build_plymouth(tmp, accent, bg, final_dir=PLY_DIR)
+        shutil.rmtree(PLY_DIR, ignore_errors=True)
+        os.replace(tmp, PLY_DIR)
+        state['plymouth'] = True
+        _save_state(state)
+        sh('update-alternatives', '--install', PLY_LINK, 'default.plymouth', PLY_FILE, '90')
+        sh('update-alternatives', '--set', 'default.plymouth', PLY_FILE)
+        _update_initramfs()
+    else:
+        log('Plymouth not found; skipping the boot splash.')
+    state['version'] = VERSION
+    _save_state(state)
+    log('Done. You will see it on the next boot.')
+    if not show_menu:
+        log('Ubuntu hides the boot menu on single-OS machines; hold Shift (BIOS) or press\n'
+            'Esc (UEFI) while booting to see it, or re-run with --show-menu.')
+    return 0
+
+
+def _update_initramfs():
+    if shutil.which('update-initramfs'):
+        log('  updating the initramfs (this takes a minute)...')
+        sh('update-initramfs', '-u')
+    else:
+        log('  update-initramfs not found; the splash appears once the initramfs is rebuilt.')
+
+
+def remove():
+    state = _state()
+    if os.path.exists(GRUB_CFG):
+        os.remove(GRUB_CFG)
+    shutil.rmtree(GRUB_DIR, ignore_errors=True)
+    if state.get('grub') and shutil.which('update-grub'):
+        sh('update-grub', check=False)
+    if os.path.exists(PLY_FILE) or state.get('plymouth'):
+        sh('update-alternatives', '--remove', 'default.plymouth', PLY_FILE, check=False)
+        before = state.get('plymouth_before') or {}
+        if before.get('status') == 'manual' and before.get('value') and os.path.exists(before['value']):
+            sh('update-alternatives', '--set', 'default.plymouth', before['value'], check=False)
+        shutil.rmtree(PLY_DIR, ignore_errors=True)
+        try:
+            _update_initramfs()
+        except StepFailed as e:
+            log(f'  {e}')
+    if os.path.exists(STATE):
+        os.remove(STATE)
+    log('Boot theme removed; the previous boot menu and splash are back.')
+    return 0
+
+
+def main_root(argv):
+    import argparse
+    ap = argparse.ArgumentParser(prog='edex-tron boot-root')
+    ap.add_argument('action', choices=('install', 'remove', 'render'))
+    ap.add_argument('--accent', default='#aacfd1')
+    ap.add_argument('--background', default='#05080d')
+    ap.add_argument('--show-menu', action='store_true')
+    ap.add_argument('--out', help='render: write both themes here instead of installing')
+    a = ap.parse_args(argv)
+    accent, bg = normalise_hex(a.accent), normalise_hex(a.background)
+    if a.action == 'render':
+        out = a.out or 'boot-preview'
+        build_grub(os.path.join(out, 'grub'), accent, bg)
+        build_plymouth(os.path.join(out, 'plymouth'), accent, bg)
+        log(f'rendered to {out}')
+        return 0
+    if os.geteuid() != 0:
+        log('boot-root must run as root (use `edex-tron boot ...`).')
+        return 1
+    if not re.fullmatch(r'#[0-9a-f]{6}', accent) or not re.fullmatch(r'#[0-9a-f]{6}', bg):
+        return 2
+    return install(accent, bg, a.show_menu) if a.action == 'install' else remove()

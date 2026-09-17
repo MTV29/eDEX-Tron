@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=eDEX-Tron Setup
+Comment=Apply the eDEX-Tron theme for your account (run once)
+Exec=edex-tron setup --pause
+Icon=edex-tron
+Terminal=true
+Categories=Settings;DesktopSettings;
+Keywords=edex;tron;theme;install;

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=eDEX-Tron
+GenericName=Desktop theme switch
+Comment=Switch the eDEX-Tron desktop (HUD, effects, hotkeys) on or off
+Exec=edex-tron toggle
+Icon=edex-tron
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=edex;tron;hud;theme;
+StartupNotify=false

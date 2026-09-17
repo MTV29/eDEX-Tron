@@ -9,16 +9,26 @@ import argparse, json, math, os
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-def _font(name, fallback):
-    # eDEX-UI's fonts when setup extracted them; otherwise Windows' own.
+def _font(name, fallback, linux_family):
+    # eDEX-UI's fonts when setup extracted them; otherwise the system's own
+    # (Bahnschrift/Consolas on Windows, Ubuntu Sans on Linux via fontconfig).
     p = os.path.join(ROOT, 'build', 'ttf', name)
-    return p if os.path.exists(p) else os.path.join(
-        os.environ.get('SystemRoot', r'C:\Windows'), 'Fonts', fallback)
+    if os.path.exists(p):
+        return p
+    if os.name == 'nt':
+        return os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'Fonts', fallback)
+    import subprocess
+    try:
+        found = subprocess.run(['fc-match', '-f', '%{file}', linux_family],
+                               capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        found = ''
+    return found or 'DejaVuSans.ttf'
 
 
-FONT_MED   = _font('united_sans_medium.ttf', 'bahnschrift.ttf')
-FONT_LIGHT = _font('united_sans_light.ttf', 'bahnschrift.ttf')
-FONT_MONO  = _font('fira_mono.ttf', 'consola.ttf')
+FONT_MED   = _font('united_sans_medium.ttf', 'bahnschrift.ttf', 'Ubuntu Sans:weight=500')
+FONT_LIGHT = _font('united_sans_light.ttf', 'bahnschrift.ttf', 'Ubuntu Sans:light')
+FONT_MONO  = _font('fira_mono.ttf', 'consola.ttf', 'Ubuntu Sans Mono')
 
 
 def hex2rgb(h):
@@ -98,7 +108,7 @@ def tick_frame(d, box, th, vh, alpha=70, arm=2.2):
         d.line([cx, cy, cx, cy + sy * L], fill=a, width=w)
 
 
-def draw_hud(img, th, vh):
+def draw_hud(img, th, vh, footer=None):
     ov = Image.new('RGBA', img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
     a = th['accent']
@@ -136,7 +146,7 @@ def draw_hud(img, th, vh):
     d.text((cx, m + 4.9 * vh), "TRON  ·  DESKTOP ENVIRONMENT",
            font=f_small, fill=a + (140,), anchor='mt')
 
-    footer = "SHELL: CMD   ·   THEME: TRON   ·   RENDER: OK"
+    footer = footer or "SHELL: CMD   ·   THEME: TRON   ·   RENDER: OK"
     d.text((cx, H - m - 3.4 * vh), footer, font=f_mono, fill=a + (130,), anchor='mt')
 
     img.alpha_composite(ov)
@@ -173,7 +183,7 @@ def load_config(path):
         return {}
 
 
-def build(width, height, theme, out, ss=2, config=None):
+def build(width, height, theme, out, ss=2, config=None, footer=None):
     th = load_theme(theme)
     cfg = config or {}
     if cfg.get('accent'):
@@ -187,7 +197,7 @@ def build(width, height, theme, out, ss=2, config=None):
         draw_grid(img, th, vh)
     draw_radar(img, th, vh, ss)
     draw_vignette(img, th)
-    draw_hud(img, th, vh)
+    draw_hud(img, th, vh, footer)
     draw_scanlines(img, vh)
     img = img.convert('RGB').resize((width, height), Image.LANCZOS)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -208,5 +218,6 @@ if __name__ == '__main__':
         'themes', 'edex', 'tron.json'))  # bundled; no eDEX-UI install needed
     p.add_argument('--out', default=os.path.join(ROOT, 'assets', 'wallpaper', 'edex-tron-1920x1080.png'))
     p.add_argument('--config', default=os.path.join(ROOT, 'theme.json'))
+    p.add_argument('--footer', help='bottom caption (default names the Windows shell)')
     a = p.parse_args()
-    build(a.width, a.height, a.theme, a.out, config=load_config(a.config))
+    build(a.width, a.height, a.theme, a.out, config=load_config(a.config), footer=a.footer)
