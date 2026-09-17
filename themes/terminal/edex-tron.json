@@ -1,0 +1,23 @@
+{
+  "name": "eDEX Tron",
+  "foreground": "#AACFD1",
+  "background": "#05080D",
+  "cursorColor": "#AACFD1",
+  "selectionBackground": "#AACFD1",
+  "black": "#05080D",
+  "red": "#D1706A",
+  "green": "#8FD1A8",
+  "yellow": "#D1C48F",
+  "blue": "#7FA8D1",
+  "purple": "#B08FD1",
+  "cyan": "#AACFD1",
+  "white": "#CFE4E5",
+  "brightBlack": "#262828",
+  "brightRed": "#E88B84",
+  "brightGreen": "#A9E4C2",
+  "brightYellow": "#E4DBA9",
+  "brightBlue": "#99C2E4",
+  "brightPurple": "#C8A9E4",
+  "brightCyan": "#C8E6E7",
+  "brightWhite": "#F0F7F7"
+}

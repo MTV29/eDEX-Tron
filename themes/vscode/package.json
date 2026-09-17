@@ -1,0 +1,18 @@
+{
+  "name": "edex-tron-theme",
+  "displayName": "eDEX Tron",
+  "description": "Colour theme derived from eDEX-UI's tron palette.",
+  "version": "1.0.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Themes"],
+  "contributes": {
+    "themes": [
+      {
+        "label": "eDEX Tron",
+        "uiTheme": "vs-dark",
+        "path": "./themes/edex-tron-color-theme.json"
+      }
+    ]
+  }
+}

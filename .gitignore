@@ -1,0 +1,37 @@
+# --- machine-specific / generated ------------------------------------------
+# (gitignore has no end-of-line comments, so every note sits on its own line)
+build/
+dist/
+*.log
+preview.png
+
+# your registry backup and deployed assets - never commit
+runtime/
+
+# built per machine: it bakes in local paths
+eDEX-Tron.exe
+
+# your own settings (setup creates them from the *.default.* files)
+dock.txt
+theme.json
+
+# extracted from your own eDEX-UI install - not redistributable
+assets/fonts/
+assets/sounds/
+
+# rendered for your screen by setup / retheme
+assets/wallpaper/
+
+# skins: relayout.ps1 generates every panel; only @Resources scripts are source
+skins/eDEX-Tron/*/
+!skins/eDEX-Tron/@Resources/
+skins/eDEX-Tron/@Resources/Fonts/
+skins/eDEX-Tron/@Resources/Dock/
+skins/eDEX-Tron/@Resources/Desktop/
+skins/eDEX-Tron/@Resources/Art/
+skins/eDEX-Tron/@Resources/Variables.inc
+skins/eDEX-Tron/@Resources/*.txt
+
+# python
+__pycache__/
+*.pyc

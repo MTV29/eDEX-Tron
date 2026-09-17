@@ -1,0 +1,20 @@
+# eDEX-Tron dock — one shortcut per line:   Label | target [| icon source]
+#
+# Setup copies this to dock.txt on first run; edit dock.txt (or click
+# "+ EDIT" on the dock) to make it yours.
+#
+# Target can be an .exe, a .lnk, a folder, a document, a URI scheme
+# (ms-settings:, https://...) or a Store app (shell:AppsFolder\<id>!App).
+# Environment variables are expanded. The optional third field supplies an
+# icon for targets that have none of their own. Entries whose target is
+# missing are skipped, so it is fine to list apps you have not installed.
+
+Files      | explorer.exe
+Terminal   | wt.exe
+Chrome     | %ProgramFiles%\Google\Chrome\Application\chrome.exe
+Edge       | %ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe
+Code       | %LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe
+eDEX-UI    | %ProgramFiles%\eDEX-UI\eDEX-UI.exe
+Tasks      | taskmgr.exe
+Settings   | ms-settings: | %SystemRoot%\ImmersiveControlPanel\SystemSettings.exe
+Theme      | %USERPROFILE%\Documents\eDEX-Tron\eDEX-Tron.exe
