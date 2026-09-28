@@ -3,7 +3,7 @@ Edit the dock's shortcut list and rebuild the HUD around it.
 
 Opens dock.txt in Notepad and waits. When you close it, the whole layout is
 re-planned (src\tools\relayout.ps1): adding or removing apps can change how
-many rows the dock wraps to, which moves the filesystem list and the Desktop
+many rows the dock wraps to, which moves the folder grid and the Desktop
 grid, so rebuilding only the dock would leave them overlapping.
 
 Bound to the dock's right-click and to its "+ EDIT" caption.

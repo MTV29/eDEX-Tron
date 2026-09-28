@@ -677,75 +677,6 @@ def conninfo(gh=95):
     """).strip()])
 
 
-# -------------------------------------------------------------- FILESYSTEM ---
-def filesystem(drives, rows=9, width=None):
-    """eDEX's file browser, backed by the FileView plugin.
-
-    FileView has no parent/child relationship: there is no `FileViewParent`
-    option at all (the DLL's option list is Path / Count / Index / Type / Sort*
-    / Show* / Icon*). Every measure carries its own `Path` and picks an entry
-    with `Index`. Omitting Path makes the plugin list the machine's drives
-    instead, which is why a wrong config shows `C:\\` on every row.
-    """
-    w = W if width is None else width
-    row_h = 16
-    out = [skin_header(2000), header('Filesystem', 'tracking', width=w),
-           textwrap.dedent(f"""
-    [MeasureFolderPath]
-    Measure=Plugin
-    Plugin=FileView
-    Path=#FilePath#
-    Type=FolderPath
-
-    [MeterPath]
-    Meter=String
-    MeasureName=MeasureFolderPath
-    X={PAD}
-    Y=10R
-    W={w - PAD * 2}
-    H={H_LABEL}
-    ClipString=1
-    FontFace=#FontLight#
-    FontSize={FS_LABEL}
-    FontColor=#Accent#,{A_LABEL}
-    AntiAlias=1
-    Text=%1
-    """).strip()]
-
-    for i in range(1, rows + 1):
-        out.append(textwrap.dedent(f"""
-        [MeasureFile{i}]
-        Measure=Plugin
-        Plugin=FileView
-        Path=#FilePath#
-        Count={rows}
-        Index={i}
-        Type=FileName
-        ShowDotDot=1
-        SortType=Type
-        """).strip())
-
-    top = 54
-    for i in range(1, rows + 1):
-        out.append(textwrap.dedent(f"""
-        [MeterFile{i}]
-        Meter=String
-        MeasureName=MeasureFile{i}
-        X={PAD}
-        Y={top + (i - 1) * row_h}
-        W={w - PAD * 2}
-        H={row_h}
-        ClipString=1
-        FontFace=#FontMono#
-        FontSize={FS_MONO}
-        FontColor=#Accent#,220
-        AntiAlias=1
-        LeftMouseUpAction=[!CommandMeasure MeasureFile{i} "FollowPath"]
-        Text=%1
-        """).strip())
-    return '\n\n'.join(out)
-
-
 # ---------------------------------------------------------------- TERMINAL ---
 def terminal(tw, th):
     """eDEX's main shell panel.
@@ -808,7 +739,7 @@ def pick_fonts():
     return {'main': 'Bahnschrift', 'light': 'Bahnschrift Light', 'mono': 'Consolas'}
 
 
-def variables(th, home, desktop):
+def variables(th, desktop, folder):
     fonts = pick_fonts()
     return textwrap.dedent(f"""
     [Variables]
@@ -822,12 +753,10 @@ def variables(th, home, desktop):
     FontMono={fonts['mono']}
     ; Full-scale deflection for the traffic histograms, in bytes/sec.
     NetMax=5000000
-    ; Starting directory for the Filesystem panel. Point it anywhere;
-    ; the home directory is avoided because FileView cannot hide the
-    ; dot-folders that sort ahead of everything real.
-    FilePath={home}
     ; Folder the Shortcuts panel mirrors -- point this anywhere you like.
     DesktopPath={desktop}
+    ; Folder the Folder panel mirrors (theme.json "folder"), e.g. your games.
+    FolderPath={folder}
     """).strip()
 
 
@@ -839,23 +768,16 @@ def main():
         'themes', 'edex', 'tron.json'))  # bundled; no eDEX-UI install needed
     p.add_argument('--cores', type=int, default=20)
     p.add_argument('--cpu-name', default='CPU')
-    p.add_argument('--drives', default='C')
     p.add_argument('--width', type=int, default=250)
     p.add_argument('--term-width', type=int, default=700)
     p.add_argument('--term-height', type=int, default=430)
-    p.add_argument('--fs-width', type=int, default=430,
-                   help='filesystem panel width in logical px')
-    p.add_argument('--fs-rows', type=int, default=9)
     p.add_argument('--graph-height', type=int, default=95,
                    help='height of each half of the network usage graph')
-    # Not the home directory: it holds ~30 tool config folders (.cache,
-    # .docker, .claude ...) that sort ahead of everything real. They carry no
-    # hidden attribute and FileView has no exclusion filter, so a browser
-    # rooted there can only show junk. Documents is a folder people browse.
-    p.add_argument('--home', default=os.path.join(
-        os.environ.get('USERPROFILE', 'C:\\'), 'Documents'))
     p.add_argument('--desktop', default=os.path.join(
         os.environ.get('USERPROFILE', 'C:\\'), 'Desktop'))
+    p.add_argument('--folder', default=os.path.join(
+        os.environ.get('USERPROFILE', 'C:\\'), 'Desktop', 'Games'),
+        help='folder the Folder panel mirrors')
     p.add_argument('--config', default=os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'theme.json'))
     a = p.parse_args()
@@ -875,7 +797,7 @@ def main():
         pass
     os.makedirs(os.path.join(a.out, '@Resources'), exist_ok=True)
     with open(os.path.join(a.out, '@Resources', 'Variables.inc'), 'w') as f:
-        f.write(variables(th, a.home, a.desktop) + '\n')
+        f.write(variables(th, a.desktop, a.folder) + '\n')
 
     skins = {
         'Clock': clock(),
@@ -885,9 +807,8 @@ def main():
         'NetStat': netstat(),
         # The Network Usage graph takes the slot eDEX gives its globe.
         'ConnInfo': conninfo(a.graph_height),
-        'FileSystem': filesystem(a.drives.split(','), rows=a.fs_rows, width=a.fs_width),
-        # Dock and Desktop are generated by gen_dock.ps1 -- they need icons
-        # extracted from real executables, which is a Windows API job.
+        # Dock, Desktop and Folder are generated by gen_dock.ps1: they need
+        # icons extracted from real executables, which is a Windows API job.
         'Terminal': terminal(a.term_width, a.term_height),
     }
     problems = 0

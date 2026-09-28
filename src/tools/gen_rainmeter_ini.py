@@ -1,7 +1,7 @@
 """Plan the eDEX-Tron layout for the actual screen and emit Rainmeter.ini.
 
 The arrangement follows eDEX-UI's home screen: a column of system panels down
-each side, the shell in the middle, and a bottom band holding the filesystem
+each side, the shell in the middle, and a bottom band holding the folder
 browser, the shortcut dock and the Desktop grid. Nothing is positioned by hand
 any more -- `plan()` stacks the panels from their known heights so the layout
 fits whatever screen it is given.
@@ -9,7 +9,7 @@ fits whatever screen it is given.
 The pieces depend on each other, which is why they are planned together:
 the dock's width (and so how many rows it wraps to) decides where the Desktop
 grid starts; the dock's height decides how much room is left for the
-filesystem list and therefore how tall the shell can be.
+folder grid and therefore how tall the shell can be.
 
 Two things worth knowing:
 
@@ -42,14 +42,13 @@ H = {
     'TopList': 135,
 }
 CONNINFO_FIXED = 72          # ConnInfo height = 72 + 2 * graph height
-FS_FIXED, FS_ROW = 54, 16    # FileSystem height = 54 + 16 * rows
 GRID_CELL = 66               # gen_dock: icon 40 + gap 26
 GRID_ROW = 68                # gen_dock: icon 40 + label 28
 GRID_BASE = 111              # gen_dock: height of a one-row grid
 TERM_FRAME_TOP = 25          # Terminal skin: caption + rule above the frame
 TERM_CHROME = 29             # Terminal skin height = frame height + this
 
-INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'FileSystem', 'NetStat'}
+INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'Folder', 'NetStat'}
 DOCK_SHARE = 0.60            # the dock may take this much of the bottom band
 
 
@@ -65,7 +64,7 @@ def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
-def plan(screen_w, work_h, dock_n, desk_n):
+def plan(screen_w, work_h, dock_n, desk_n, folder_n=0):
     left_x = MARGIN
     right_x = screen_w - PANEL_W - MARGIN
     band_l = left_x + PANEL_W + GUTTER
@@ -97,16 +96,18 @@ def plan(screen_w, work_h, dock_n, desk_n):
     dock_y = work_h - dock_h - BOTTOM_PAD
     pos['Dock'] = (left_x, dock_y)
 
-    # --- the band everything below the shell starts at
+    # --- the band everything below the shell starts at, holding the folder
+    # panel (an icon grid of one folder, e.g. your games) on the left
     lb_w = max(dock_w, 380)
-    fs_full = FS_FIXED + 9 * FS_ROW
-    band_top = max(left_bottom + GAP, dock_y - GAP - fs_full)
-    # On a short screen the list may not fit between the shell and the dock;
+    folder_cols = max(1, (lb_w - 2) // GRID_CELL)
+    folder_want = math.ceil(max(1, folder_n) / folder_cols)
+    band_top = max(left_bottom + GAP, dock_y - GAP - grid_h(min(folder_want, 3)))
+    # On a short screen the grid may not fit between the shell and the dock;
     # drop the panel rather than let it overlap.
-    fs_fit = (dock_y - GAP - band_top - FS_FIXED) // FS_ROW
-    hidden = [] if fs_fit >= 3 else ['FileSystem']
-    fs_rows = clamp(fs_fit, 3, 12)
-    pos['FileSystem'] = (left_x, band_top)
+    folder_fit = (dock_y - GAP - band_top - GRID_BASE) // GRID_ROW + 1
+    hidden = [] if folder_fit >= 1 else ['Folder']
+    folder_rows = clamp(min(folder_want, folder_fit), 1, 6)
+    pos['Folder'] = (left_x, band_top)
 
     # --- Desktop grid fills the rest of the band
     grid_x = left_x + lb_w + GUTTER
@@ -124,7 +125,7 @@ def plan(screen_w, work_h, dock_n, desk_n):
         'positions': pos,
         'term_w': term_w, 'term_h': term_h,
         'term_rect': [band_l + 1, TOP + TERM_FRAME_TOP + 1, term_w - 2, term_h - 2],
-        'fs_w': lb_w, 'fs_rows': fs_rows,
+        'folder_cols': folder_cols, 'folder_rows': folder_rows,
         'graph_h': graph_h,
         'dock_cols': dock_cols, 'dock_rows': dock_rows,
         'desk_cols': desk_cols, 'desk_rows': desk_rows,
@@ -133,7 +134,7 @@ def plan(screen_w, work_h, dock_n, desk_n):
 
 
 ORDER = ['Clock', 'CpuInfo', 'NetStat', 'RamWatcher', 'ConnInfo', 'TopList',
-         'Terminal', 'FileSystem', 'Dock', 'Desktop']
+         'Terminal', 'Folder', 'Dock', 'Desktop']
 
 
 def build_ini(p, skin_path, root, disable=()):
@@ -164,11 +165,13 @@ if __name__ == '__main__':
                     help='logical height of the work area (screen minus taskbar)')
     ap.add_argument('--dock-count', type=int, default=10)
     ap.add_argument('--desk-count', type=int, default=10)
+    ap.add_argument('--folder-count', type=int, default=10,
+                    help='items in the folder panel (theme.json "folder")')
     ap.add_argument('--root', default='eDEX-Tron')
     ap.add_argument('--disable', default='')
     a = ap.parse_args()
 
-    p = plan(a.screen_w, a.work_h, a.dock_count, a.desk_count)
+    p = plan(a.screen_w, a.work_h, a.dock_count, a.desk_count, a.folder_count)
 
     if a.plan_out:
         os.makedirs(os.path.dirname(os.path.abspath(a.plan_out)), exist_ok=True)
@@ -187,6 +190,6 @@ if __name__ == '__main__':
                 f.write(','.join(str(v) for v in p['term_rect']))
 
     print(f"plan {a.screen_w}x{a.work_h}: terminal {p['term_w']}x{p['term_h']}, "
-          f"fs {p['fs_rows']} rows, graph {p['graph_h']}, "
+          f"folder {p['folder_cols']}x{p['folder_rows']}, graph {p['graph_h']}, "
           f"dock {p['dock_cols']}x{p['dock_rows']}, desktop {p['desk_cols']}x{p['desk_rows']}"
           f"{'  hidden: ' + ', '.join(p['hidden']) if p['hidden'] else ''}")

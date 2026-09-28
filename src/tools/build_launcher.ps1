@@ -143,6 +143,25 @@ static class EdexTron
 
     static bool IsOn() { return Running("Rainmeter"); }
 
+    // The Folder panel's folder, as relayout.ps1 recorded it from theme.json.
+    static string FolderPanelPath()
+    {
+        try
+        {
+            string file = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "eDEX-Tron", "runtime", "folder-path.txt");
+            if (File.Exists(file))
+            {
+                string path = Environment.ExpandEnvironmentVariables(File.ReadAllText(file).Trim());
+                if (path.Length > 0) return path;
+            }
+        }
+        catch { }
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Games");
+    }
+
     // ---- Desktop watcher ------------------------------------------------
     // The Desktop panel is generated (icons come from the shell), so it has to
     // be rebuilt when the folder changes. A FileSystemWatcher is event-driven:
@@ -155,13 +174,14 @@ static class EdexTron
         catch { return false; }
     }
 
-    static void RunRefresh()
+    static void RunRefresh(string panel)
     {
         if (!File.Exists(RefreshScript)) return;
         try
         {
             var psi = new ProcessStartInfo("powershell.exe",
-                "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + RefreshScript + "\"");
+                "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + RefreshScript
+                + "\" -Panel " + panel);
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;
             using (var p = Process.Start(psi)) p.WaitForExit(120000);
@@ -177,19 +197,27 @@ static class EdexTron
             if (!created) return;               // one watcher is enough
 
             string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            RunRefresh();                       // catch changes made while the theme was off
+            RunRefresh("Both");                 // catch changes made while the theme was off
 
             // Debounce: a copy or unzip fires many events; rebuild once they settle.
-            var timer = new System.Threading.Timer(_ => RunRefresh(), null, Timeout.Infinite, Timeout.Infinite);
-            FileSystemEventHandler changed = (s, e) => timer.Change(1500, Timeout.Infinite);
-
-            var fsw = new FileSystemWatcher(desktop);
-            fsw.IncludeSubdirectories = false;
-            fsw.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName;
-            fsw.Created += changed;
-            fsw.Deleted += changed;
-            fsw.Renamed += (s, e) => timer.Change(1500, Timeout.Infinite);
-            fsw.EnableRaisingEvents = true;
+            var watchers = new System.Collections.Generic.List<FileSystemWatcher>();
+            foreach (var pair in new[] { Tuple.Create("Desktop", desktop),
+                                         Tuple.Create("Folder", FolderPanelPath()) })
+            {
+                string panel = pair.Item1, dir = pair.Item2;
+                if (dir == null || !Directory.Exists(dir)) continue;
+                var timer = new System.Threading.Timer(_ => RunRefresh(panel), null,
+                    Timeout.Infinite, Timeout.Infinite);
+                FileSystemEventHandler changed = (s, e) => timer.Change(1500, Timeout.Infinite);
+                var fsw = new FileSystemWatcher(dir);
+                fsw.IncludeSubdirectories = false;
+                fsw.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName;
+                fsw.Created += changed;
+                fsw.Deleted += changed;
+                fsw.Renamed += (s, e) => timer.Change(1500, Timeout.Infinite);
+                fsw.EnableRaisingEvents = true;
+                watchers.Add(fsw);
+            }
 
             Thread.Sleep(Timeout.Infinite);     // ended by Stop() killing this process
         }

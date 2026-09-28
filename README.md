@@ -30,7 +30,8 @@ affiliated with or endorsed by eDEX-UI. See
 
 - **Live HUD** on the desktop, behind your windows: clock, uptime and machine
   info; per-core CPU graphs; memory map; network status (with a refresh
-  button); network usage graph; top processes; a file browser.
+  button); network usage graph; top processes; a folder of your choosing
+  (your games by default) as clickable icons.
 - **Main shell** — a real Command Prompt that sits inside an eDEX-style frame.
 - **Dock** of your apps, and a **Desktop** panel that mirrors your Desktop
   folder and updates itself. Real desktop icons are hidden while the theme is on.
@@ -86,6 +87,11 @@ wraps to a second row when it gets long.
 
 **Desktop panel** — shows what's in your Desktop folder and refreshes a moment
 after anything changes. Right-click to rescan by hand.
+
+**Folder panel** — the wide panel under the shell mirrors one folder as
+clickable icons; it starts as `Desktop\Games`. Point it anywhere by setting
+`folder` in `theme.json`, then run `src	oolselayout.ps1`. Like the Desktop
+panel it follows changes to that folder, and right-click rescans it.
 
 **Colours** — all colours live in `theme.json`. Change them with:
 

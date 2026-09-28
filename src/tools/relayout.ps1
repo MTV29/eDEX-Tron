@@ -59,36 +59,61 @@ $dockCfg = Join-Path $Root 'dock.txt'
 $dockLine = & (Join-Path $tools 'gen_dock.ps1') -Config $dockCfg -SkinRoot $srcSkins | Select-Object -First 1
 $dockCount = if ("$dockLine" -match ': (\d+) entr') { [int]$Matches[1] } else { 10 }
 $desktop = [Environment]::GetFolderPath('Desktop')
-$deskCount = @(Get-ChildItem $desktop -Force -ErrorAction SilentlyContinue |
-    Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and $_.Name -ne 'desktop.ini' }).Count
+function Get-VisibleCount([string]$path) {
+    @(Get-ChildItem $path -Force -ErrorAction SilentlyContinue |
+        Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and $_.Name -ne 'desktop.ini' }).Count
+}
+$deskCount = Get-VisibleCount $desktop
+
+# The Folder panel mirrors one folder of your choosing (theme.json "folder").
+$folder = Join-Path $desktop 'Games'
+try {
+    $cfg = Get-Content (Join-Path $Root 'theme.json') -Raw -ErrorAction Stop | ConvertFrom-Json
+    if ($cfg.folder) { $folder = [Environment]::ExpandEnvironmentVariables($cfg.folder) }
+} catch { }
+if (-not (Test-Path $folder)) {
+    # Not the Desktop: that would make this panel a copy of the Desktop one.
+    Write-Warning "theme.json folder not found: $folder -- using Documents instead"
+    $folder = [Environment]::GetFolderPath('MyDocuments')
+}
+$folderCount = Get-VisibleCount $folder
+# remember it for the watcher and the panel's rescan action
+New-Item -ItemType Directory -Force -Path (Join-Path $Root 'runtime') | Out-Null
+Set-Content (Join-Path $Root 'runtime\folder-path.txt') $folder -Encoding UTF8
 
 # --- 3. plan ----------------------------------------------------------------
 New-Item -ItemType Directory -Force -Path (Split-Path $planFile) | Out-Null
 Invoke-Py (Join-Path $tools 'gen_rainmeter_ini.py') --skin-path "$skinRoot\" `
     --plan-out $planFile --screen-w $logW --work-h $logWorkH `
-    --dock-count $dockCount --desk-count $deskCount | ForEach-Object { "$_" }
+    --dock-count $dockCount --desk-count $deskCount --folder-count $folderCount | ForEach-Object { "$_" }
 $plan = Get-Content $planFile -Raw | ConvertFrom-Json
 
 # --- 4. regenerate the skins at the planned sizes ---------------------------
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $cpuName = if ($cpu.Name -match '(i[3579]-\w+|Ryzen \d+ \w+|Core Ultra \d \w+)') { $Matches[1] } else { $cpu.Name.Trim() }
-$drives = (Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' |
-           ForEach-Object { $_.DeviceID.TrimEnd(':') }) -join ','
-
 Invoke-Py (Join-Path $tools 'gen_skins.py') --out $srcSkins `
-    --cores $cpu.NumberOfLogicalProcessors --cpu-name $cpuName --drives $drives `
+    --cores $cpu.NumberOfLogicalProcessors --cpu-name $cpuName `
     --width 250 --term-width $plan.term_w --term-height $plan.term_h `
-    --fs-width $plan.fs_w --fs-rows $plan.fs_rows --graph-height $plan.graph_h | Out-Null
+    --desktop $desktop --folder $folder --graph-height $plan.graph_h | Out-Null
 
 & (Join-Path $tools 'gen_dock.ps1') -Config $dockCfg -SkinRoot $srcSkins -Cols $plan.dock_cols | Out-Null
 & (Join-Path $tools 'gen_dock.ps1') -FromFolder $desktop -SkinRoot $srcSkins -SkinName 'Desktop' `
     -Title 'Desktop' -Cols $plan.desk_cols -Rows $plan.desk_rows -NoEdit | Out-Null
-"skins generated: dock $($plan.dock_cols)x$($plan.dock_rows), desktop $($plan.desk_cols)x$($plan.desk_rows), shell $($plan.term_w)x$($plan.term_h)"
+& (Join-Path $tools 'gen_dock.ps1') -FromFolder $folder -SkinRoot $srcSkins -SkinName 'Folder' `
+    -Title (Split-Path $folder -Leaf) -Cols $plan.folder_cols -Rows $plan.folder_rows -NoEdit | Out-Null
+"skins generated: dock $($plan.dock_cols)x$($plan.dock_rows), desktop $($plan.desk_cols)x$($plan.desk_rows), $(Split-Path $folder -Leaf) $($plan.folder_cols)x$($plan.folder_rows), shell $($plan.term_w)x$($plan.term_h)"
 
 # --- 5. deploy ---------------------------------------------------------------
 $running = [bool](Get-Process Rainmeter -ErrorAction SilentlyContinue)
+# Rainmeter writes its own Rainmeter.ini (skin positions) while shutting down.
+# Wait for the process to be gone before writing ours, or that save lands on
+# top of the new layout and the old one comes back.
 Get-Process Rainmeter -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Milliseconds 600
+for ($i = 0; $i -lt 40; $i++) {
+    if (-not (Get-Process Rainmeter -ErrorAction SilentlyContinue)) { break }
+    Start-Sleep -Milliseconds 250
+}
+Start-Sleep -Milliseconds 400
 
 New-Item -ItemType Directory -Force -Path $skinRoot | Out-Null
 if (Test-Path $live) { Remove-Item $live -Recurse -Force }
@@ -97,7 +122,7 @@ Copy-Item $srcSkins $skinRoot -Recurse -Force
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\Rainmeter" | Out-Null
 $ini = Join-Path $Root 'build\Rainmeter.ini'
 Invoke-Py (Join-Path $tools 'gen_rainmeter_ini.py') --skin-path "$skinRoot\" --out $ini `
-    --screen-w $logW --work-h $logWorkH --dock-count $dockCount --desk-count $deskCount | Out-Null
+    --screen-w $logW --work-h $logWorkH --dock-count $dockCount --desk-count $deskCount --folder-count $folderCount | Out-Null
 Copy-Item $ini "$env:APPDATA\Rainmeter\Rainmeter.ini" -Force
 
 if ((Test-Path $rmExe) -and ($running -or -not $env:EDEX_NO_START)) {

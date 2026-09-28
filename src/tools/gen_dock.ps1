@@ -41,6 +41,9 @@ if (-not $SkinRoot) { $SkinRoot = Join-Path $root 'skins\eDEX-Tron' }
 
 $iconDir = Join-Path $SkinRoot "@Resources\$SkinName"
 New-Item -ItemType Directory -Force -Path $iconDir, (Join-Path $SkinRoot $SkinName) | Out-Null
+# Start from an empty icon set: a removed entry would otherwise leave its PNG
+# behind and the next rebuild would copy that orphan to the live skin.
+Get-ChildItem (Join-Path $iconDir 'slot*.png') -ErrorAction SilentlyContinue | Remove-Item -Force
 
 Add-Type -AssemblyName System.Drawing
 Add-Type -Namespace Dock -Name Ico -MemberDefinition @'
@@ -119,7 +122,7 @@ function Resolve-Target([string]$raw) {
     return $null
 }
 
-function Save-Icon([string]$source, [string]$dest) {
+function Save-Icon([string]$source, [string]$dest, [int]$Index = 0) {
     # Already an image (a Store app's logo asset): copy it straight through.
     if ($source -match '\.(png|ico|jpg|jpeg)$' -and (Test-Path $source)) {
         try {
@@ -156,7 +159,7 @@ function Save-Icon([string]$source, [string]$dest) {
     foreach ($size in 256, 128, 64, 48) {
         $h = New-Object IntPtr[] 1
         $id = New-Object int[] 1
-        $n = [Dock.Ico]::PrivateExtractIconsW($source, 0, $size, $size, $h, $id, 1, 0)
+        $n = [Dock.Ico]::PrivateExtractIconsW($source, $Index, $size, $size, $h, $id, 1, 0)
         if ($n -gt 0 -and $h[0] -ne [IntPtr]::Zero) {
             try {
                 $ico = [System.Drawing.Icon]::FromHandle($h[0])
@@ -191,16 +194,35 @@ if ($FromFolder) {
     foreach ($item in $items) {
         $png = Join-Path $iconDir ("slot{0}.png" -f $slot)
         $iconSrc = $item.FullName
+        $iconIdx = 0
         if ($item.Extension -eq '.lnk') {
             $sh = New-Object -ComObject WScript.Shell
-            $t = $sh.CreateShortcut($item.FullName).TargetPath
-            if ($t -and (Test-Path $t)) { $iconSrc = $t }
+            $sc = $sh.CreateShortcut($item.FullName)
+            # a shortcut's own icon wins; otherwise take the target's
+            $loc = "$($sc.IconLocation)".Trim()
+            $locPath, $locIdx = ($loc -split ',', 2)
+            if ($locPath -and $locPath -ne '' -and (Test-Path $locPath)) {
+                $iconSrc = $locPath
+                if ($locIdx) { [void][int]::TryParse($locIdx, [ref]$iconIdx) }
+            } elseif ($sc.TargetPath -and (Test-Path $sc.TargetPath)) {
+                $iconSrc = $sc.TargetPath
+            }
+        } elseif ($item.Extension -eq '.url') {
+            # Steam/Epic game links: [InternetShortcut] names an .ico, and the
+            # file itself only yields the generic link icon with an overlay.
+            $ini = Get-Content $item.FullName -ErrorAction SilentlyContinue
+            $f = ($ini | Where-Object { $_ -like 'IconFile=*' } | Select-Object -First 1) -replace '^IconFile=', ''
+            $i = ($ini | Where-Object { $_ -like 'IconIndex=*' } | Select-Object -First 1) -replace '^IconIndex=', ''
+            if ($f -and (Test-Path $f)) {
+                $iconSrc = $f
+                if ($i) { [void][int]::TryParse($i, [ref]$iconIdx) }
+            }
         }
         $entries += [pscustomobject]@{
             Label   = $item.BaseName
             Path    = $item.FullName
             Slot    = $slot
-            HasIcon = (Save-Icon $iconSrc $png)
+            HasIcon = (Save-Icon $iconSrc $png $iconIdx)
         }
         $slot++
     }
@@ -256,7 +278,7 @@ $sb = New-Object System.Text.StringBuilder
 function W($s) { [void]$sb.AppendLine($s) }
 
 $edit = '["powershell.exe" "-NoProfile" "-WindowStyle" "Hidden" "-ExecutionPolicy" "Bypass" "-File" "#@#customize_dock.ps1"]'
-$rescan = '["powershell.exe" "-NoProfile" "-WindowStyle" "Hidden" "-ExecutionPolicy" "Bypass" "-File" "#@#refresh_desktop.ps1"]'
+$rescan = "[`"powershell.exe`" `"-NoProfile`" `"-WindowStyle`" `"Hidden`" `"-ExecutionPolicy`" `"Bypass`" `"-File`" `"#@#refresh_desktop.ps1`" `"-Panel`" `"$SkinName`"]"
 $action = if ($NoEdit) { $rescan } else { $edit }
 $hint   = if ($NoEdit) { 'Right-click to rescan the folder' } else { 'Right-click to edit shortcuts' }
 $corner = if ($NoEdit) { '. Rescan' } else { '+ Edit' }
