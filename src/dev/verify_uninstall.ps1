@@ -38,6 +38,11 @@ $RegistryValues = @(
     @('HKCU:\Control Panel\Desktop', 'WallpaperStyle'),
     @('HKCU:\Control Panel\Desktop', 'TileWallpaper'),
     @('HKCU:\Control Panel\Desktop', 'AutoColorization'),
+    # Not ours to change -- tracked precisely so that if anything ever does,
+    # it shows up here rather than as "my fonts look pixelated" a reboot later.
+    @('HKCU:\Control Panel\Desktop', 'FontSmoothing'),
+    @('HKCU:\Control Panel\Desktop', 'FontSmoothingType'),
+    @('HKCU:\Control Panel\Desktop', 'UserPreferencesMask'),
     @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers', 'BackgroundType'),
     @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes', 'CurrentTheme'),
     @('HKCU:\Software\Microsoft\Windows\DWM', 'AccentColor'),
