@@ -10,6 +10,11 @@
 
     The sandbox is thrown away when the window closes, so nothing it does can
     reach the real machine except through the mapped output folder below.
+
+    It shuts itself down when the test finishes. Do NOT kill WindowsSandbox.exe
+    from the host to end a run: that force-kills a live Hyper-V virtual machine,
+    and doing it repeatedly is the likeliest explanation for this machine
+    freezing solid during a test session. Close the window, or let it finish.
   -->
   <MappedFolders>
     <MappedFolder>
@@ -32,8 +37,8 @@
     </MappedFolder>
   </MappedFolders>
   <Networking>Enable</Networking>
-  <MemoryInMB>6144</MemoryInMB>
+  <MemoryInMB>4096</MemoryInMB>
   <LogonCommand>
-    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File C:\script\run_in_sandbox.ps1</Command>
+    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\script\run_in_sandbox.ps1</Command>
   </LogonCommand>
 </Configuration>

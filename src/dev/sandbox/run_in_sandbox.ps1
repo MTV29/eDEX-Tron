@@ -163,3 +163,15 @@ Step 'uninstall on a clean machine' {
 
 Say 'DONE'
 Copy-Item $log (Join-Path $out 'latest.log') -Force
+
+# Shut the sandbox down from the inside, cleanly.
+#
+# The alternative -- killing WindowsSandbox.exe from the host between runs --
+# force-kills a running Hyper-V virtual machine, and doing that repeatedly is
+# the most likely explanation for the host freezing solid partway through a
+# test session. Never do that. If the log needs reading live, pass -KeepOpen.
+if (-not ($args -contains '-KeepOpen')) {
+    Say 'shutting the sandbox down cleanly in 10s (its log is already saved)'
+    Start-Sleep -Seconds 10
+    Stop-Computer -Force
+}
