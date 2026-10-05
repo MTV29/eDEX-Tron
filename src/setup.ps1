@@ -85,10 +85,21 @@ function Ensure-Winget($id, $label, $check) {
     if (& $check) { Ok "$label already installed"; return }
     Ok "installing $label ..."
     $ErrorActionPreference = 'Continue'
-    winget install --id $id --exact --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    # Keep what winget said. Throwing it away meant that when a dependency
+    # would not install -- no network, a source not yet accepted, a package
+    # pulled -- all anyone got was "did not install", and then a hard failure
+    # several lines later with nothing to go on.
+    $out = winget install --id $id --exact --silent `
+               --accept-package-agreements --accept-source-agreements 2>&1
+    $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     Refresh-Path
-    if (& $check) { Ok "$label installed" } else { Warn "$label did not install - continuing without it" }
+    if (& $check) { Ok "$label installed"; return }
+
+    Warn "$label did not install (winget exit code $code)"
+    $tail = @($out | ForEach-Object { "$_".Trim() } | Where-Object { $_ }) | Select-Object -Last 6
+    foreach ($line in $tail) { Warn "  $line" }
+    Warn "  try by hand:  winget install --id $id --exact"
 }
 
 # --- 1 ------------------------------------------------------------------------
