@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0-linux — 2026-10-05 (Linux)
+
+### Fixed
+
+- The HUD did not fit a short screen: the side columns were cut off rather than
+  scrolled, and `--window` opened larger than the work area on a laptop display.
+  The columns scroll when they have to, and the window now opens at a size that
+  fits the screen it is on.
+
+Everything else is unchanged from `v0.8.0-linux`. Version numbers are kept in
+step with the Windows edition, so this release carries no other changes.
+
 ## 0.9.0 — 2026-10-05 (Windows)
 
 ### Added

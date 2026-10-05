@@ -1,4 +1,4 @@
-# eDEX-Tron for Linux 0.8.0 — tester checklist
+# eDEX-Tron for Linux 0.9.0 — tester checklist
 
 Thanks for testing! This needs **Ubuntu 26.04 with the normal (GNOME) desktop**.
 It takes about 15 minutes. Everything can be undone at the end.
@@ -18,7 +18,7 @@ journalctl --user -b -g "eDEX-Tron" --no-pager | tail -n 60
 
 ## 1. Install
 
-- [ ] `tar xf eDEX-Tron-linux-v0.8.0.tar.gz && cd eDEX-Tron-linux-v0.8.0 && ./install.sh`
+- [ ] `tar xf eDEX-Tron-linux-v0.9.0.tar.gz && cd eDEX-Tron-linux-v0.9.0 && ./install.sh`
 - [ ] It asks for your password once, finishes, and asks about the boot theme.
       Answer **n** for now (that's step 6).
 - [ ] Log out and back in.

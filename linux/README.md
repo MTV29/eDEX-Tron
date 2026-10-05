@@ -30,12 +30,12 @@ terminal on your desktop, and restyles the rest of the system to match.
 
 ## Install
 
-Download `eDEX-Tron-linux-v0.8.0.tar.gz` from the
+Download `eDEX-Tron-linux-v0.9.0.tar.gz` from the
 [Releases](../../releases) page, then in a terminal:
 
 ```bash
-tar xf eDEX-Tron-linux-v0.8.0.tar.gz
-cd eDEX-Tron-linux-v0.8.0
+tar xf eDEX-Tron-linux-v0.9.0.tar.gz
+cd eDEX-Tron-linux-v0.9.0
 ./install.sh
 ```
 
@@ -44,8 +44,8 @@ theme to your account. It then asks whether you also want the boot menu and
 splash themed. **Log out and back in once** so GNOME loads the extension;
 after that the HUD starts by itself.
 
-Prefer the package alone? Install `edex-tron_0.8.0_all.deb` with
-`sudo apt install ./edex-tron_0.8.0_all.deb`, then open **eDEX-Tron Setup** from
+Prefer the package alone? Install `edex-tron_0.9.0_all.deb` with
+`sudo apt install ./edex-tron_0.9.0_all.deb`, then open **eDEX-Tron Setup** from
 the app grid (or run `edex-tron setup`). Each person on the computer runs
 setup for their own account.
 

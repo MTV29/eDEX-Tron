@@ -14,7 +14,7 @@ scheme across Windows, the taskbar, Windows Terminal, VS Code and Office.
 > follows it, open-ports and disk panels, multi-monitor support, whole-system
 > theming, screen effects, hotkeys and a boot theme. See
 > **[linux/README.md](linux/README.md)**; downloads are under the
-> `v0.8.0-linux` release.
+> `v0.9.0-linux` release.
 
 ## Credit
 
