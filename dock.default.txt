@@ -18,3 +18,4 @@ eDEX-UI    | %ProgramFiles%\eDEX-UI\eDEX-UI.exe
 Tasks      | taskmgr.exe
 Settings   | ms-settings: | %SystemRoot%\ImmersiveControlPanel\SystemSettings.exe
 Theme      | %USERPROFILE%\Documents\eDEX-Tron\eDEX-Tron.exe
+Customise  | %USERPROFILE%\Documents\eDEX-Tron\runtime\eDEX-Tron Settings.lnk

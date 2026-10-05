@@ -144,7 +144,7 @@ if (Test-Path $icons) { & $icons -Action show | ForEach-Object { Write-Ok $_ } }
 
 foreach ($folder in 'Startup', 'Desktop', 'Programs') {
     $dir = [Environment]::GetFolderPath($folder)
-    foreach ($stale in 'eDEX-Tron', 'eDEX-Tron Theme',
+    foreach ($stale in 'eDEX-Tron', 'eDEX-Tron Theme', 'eDEX-Tron Settings',
                        'eDEX-Tron Rainmeter', 'eDEX-Tron TranslucentTB') {
         $p = Join-Path $dir "$stale.lnk"
         if (Test-Path $p) { Remove-Item $p -Force; Write-Ok "removed $folder shortcut: $stale" }

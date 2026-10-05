@@ -114,9 +114,9 @@ clickable icons; it starts as `Desktop\Games`. Point it anywhere in
 `src\tools\relayout.ps1`. Like the Desktop panel it follows changes to that
 folder, and right-click rescans it.
 
-**Settings** — press **Win+Alt+S**, or run `eDEX-Tron.exe settings`. Colours,
-which panels you want, the folder panel and every switch are all there, and it
-applies the change for you.
+**Settings** — the **CUSTOMISE** tile on the dock, **eDEX-Tron Settings** in
+the Start menu, or **Win+Alt+S**. Colours, which panels you want, the folder
+panel and every switch are all there, and it applies the change for you.
 
 **Hotkeys**
 

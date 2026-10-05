@@ -47,6 +47,15 @@ if (Test-Path $launcher) {
 
     # Start menu: searchable in either state.
     Set-Shortcut ([Environment]::GetFolderPath('Programs')) 'eDEX-Tron Theme' $launcher
+
+    # Settings had only a hotkey (Win+Alt+S) to reach it, which is no use to
+    # anyone who has not been told. Give it a Start menu entry, and keep a copy
+    # in the project so dock.txt can point a tile at it -- the dock resolves a
+    # .lnk and runs it with its arguments, which a bare path cannot carry.
+    Set-Shortcut ([Environment]::GetFolderPath('Programs')) 'eDEX-Tron Settings' $launcher 'settings'
+    $runtime = Join-Path (Split-Path $launcher -Parent) 'runtime'
+    New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+    Set-Shortcut $runtime 'eDEX-Tron Settings' $launcher 'settings'
 } else {
     "skipped  launcher not built yet - run src\tools\build_launcher.ps1 first"
 }
