@@ -114,6 +114,7 @@ static class EdexTron
     const uint MOD_ALT = 0x0001, MOD_WIN = 0x0008, MOD_NOREPEAT = 0x4000;
     const int WH_KEYBOARD_LL = 13;
     const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104;
+    const int WM_KEYUP = 0x0101, WM_SYSKEYUP = 0x0105;
     const uint SND_ASYNC = 0x0001, SND_NODEFAULT = 0x0002, SND_MEMORY = 0x0004,
                SND_FILENAME = 0x00020000;
 
@@ -433,6 +434,16 @@ static class EdexTron
     static Thread keyPlayer;
     static int keyLastTick;
 
+    // Which keys are physically down, so that holding one is one keystroke.
+    //
+    // This is the only place the theme looks at *which* key was pressed, and
+    // it does so to answer one question: is this a new press, or Windows
+    // repeating a key the person is still holding? Auto-repeat runs at about
+    // thirty a second, so without this, leaning on Shift or an arrow key is a
+    // machine gun. The code is used as an index and nothing more -- no key is
+    // recorded, counted, written down or passed on.
+    static readonly bool[] keyIsDown = new bool[256];
+
     // A low-level keyboard hook has to return promptly: take longer than
     // LowLevelHooksTimeout (300ms by default) and Windows quietly unhooks you,
     // and the clicks stop until something re-installs them. So this does no
@@ -440,14 +451,28 @@ static class EdexTron
     // does. That is what the "sometimes it works" came down to.
     static IntPtr OnKey(int code, IntPtr wp, IntPtr lp)
     {
-        if (code >= 0 && ((int)wp == WM_KEYDOWN || (int)wp == WM_SYSKEYDOWN))
+        if (code >= 0)
         {
-            // Hold the repeat rate down: a held key would otherwise machine-gun.
-            int now = Environment.TickCount;
-            if (now - keyLastTick >= 25)
+            int msg = (int)wp;
+            int vk = Marshal.ReadInt32(lp) & 0xFF;      // KBDLLHOOKSTRUCT.vkCode
+            if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
             {
-                keyLastTick = now;
-                keyRang.Set();
+                keyIsDown[vk] = false;
+            }
+            else if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
+            {
+                if (!keyIsDown[vk])
+                {
+                    keyIsDown[vk] = true;
+                    // A floor on the rate as well, for the typist who really
+                    // is hitting two hundred keys a minute on purpose.
+                    int now = Environment.TickCount;
+                    if (now - keyLastTick >= 20)
+                    {
+                        keyLastTick = now;
+                        keyRang.Set();
+                    }
+                }
             }
         }
         return CallNextHookEx(keyHook, code, wp, lp);

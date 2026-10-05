@@ -104,14 +104,19 @@ def describe(clip):
     """Print the clip's shape, and say so if it holds more than one press."""
     env, win = envelope(clip)
     print('   envelope: ' + ' '.join(f'{v:.2f}' for v in env))
-    extra = [i for i in range(1, len(env) - 1)
+    peaks = [i for i in range(1, len(env) - 1)
              if env[i] > 0.25 and env[i] >= env[i - 1] and env[i] > env[i + 1]]
-    # A smooth swell peaks once; a clip with two presses in it peaks twice with
-    # a dip between, and plays as two clicks for every key.
-    dips = [i for i in extra if min(env[:i] or [1.0]) < env[i] * 0.4]
-    if dips:
-        print('   WARNING: ' + str(len(dips) + 1) + ' separate transients -- this '
-              'will sound like that many clicks per keystroke.')
+    # A smooth swell rises to one peak and falls away. Two presses give two
+    # peaks with a real dip *between* them -- the quiet lead-in before the
+    # first peak is not a dip, which is what this used to mistake it for.
+    separate = 1 if peaks else 0
+    for a, b in zip(peaks, peaks[1:]):
+        trough = min(env[a:b + 1])
+        if trough < min(env[a], env[b]) * 0.4:
+            separate += 1
+    if separate > 1:
+        print(f'   WARNING: {separate} separate transients -- this will sound '
+              'like that many clicks per keystroke.')
         print('   Use a shorter --length, or a different --index.')
     else:
         print('   one transient: good for a keystroke')
