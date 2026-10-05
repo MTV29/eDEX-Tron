@@ -39,7 +39,7 @@ static class EdexTron
     const string RefreshScript  = @"%%REFRESHSCRIPT%%";
     const string SettingsScript = @"%%SETTINGSSCRIPT%%";
     const string RelayoutScript = @"%%RELAYOUTSCRIPT%%";
-    const string ProjectRoot    = @"%%PROJECTROOT%%";
+    internal const string ProjectRoot = @"%%PROJECTROOT%%";
     const string KeySound       = @"%%KEYSOUND%%";
     const string Version        = @"%%VERSION%%";
     const string WatcherMutex   = @"Local\eDEX-Tron-DesktopWatcher";
@@ -131,10 +131,21 @@ static class EdexTron
         return m.Success ? m.Groups[1].Value.ToLowerInvariant() == "true" : fallback;
     }
 
-    static string Str(string key, string fallback)
+    internal static string Str(string key, string fallback)
     {
         var m = Regex.Match(ThemeText(), "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
         return m.Success ? m.Groups[1].Value : fallback;
+    }
+
+    // A number out of theme.json, which Str cannot read: it only matches
+    // quoted values, and these are written bare.
+    internal static double Number(string key, double fallback)
+    {
+        var m = Regex.Match(ThemeText(), "\"" + key + "\"\\s*:\\s*(-?[0-9.]+)");
+        double v;
+        if (m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float,
+                                         CultureInfo.InvariantCulture, out v)) return v;
+        return fallback;
     }
 
     static Color Accent()

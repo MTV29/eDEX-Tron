@@ -141,6 +141,13 @@ read off the machine as it scrolls: the real processor, memory, drives, display
 adapter, network links, the services Windows actually has running, and how long
 you have been up. Any key skips it; turn it off in Settings.
 
+It will play a sound over it if you give it one: drop a `boot.mp3` or `boot.wav`
+into `assets\sounds\`, or point `bootsound` in `theme.json` anywhere you like.
+`bootsoundspeed` plays it faster than recorded (1.6 by default), and it fades out
+when the screen closes rather than cutting. Nothing is shipped with the project:
+a boot animation from a game is no more ours to redistribute than eDEX-UI's own
+typeface, so `assets\sounds\` is left out of the repository.
+
 **Key clicks** — an optional click on every keystroke, off by default. The
 click is one we render ourselves (`src\tools\gen_sounds.py`), because eDEX-UI's
 own sound set cannot be redistributed. The hook asks only *whether* a key went

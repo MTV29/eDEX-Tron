@@ -9,5 +9,6 @@
     "disk",
     "ports"
   ],
-  "off": []
+  "off": [],
+  "bootsoundspeed": 1.6
 }

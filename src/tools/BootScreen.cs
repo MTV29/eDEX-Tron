@@ -15,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
@@ -50,6 +51,8 @@ static class BootScreen
     }
 
     const int MaxLines = 40;
+    // How long the screen stays up when there is a sound to go with it.
+    const double MinSeconds = 5.0;
 
     class Line
     {
@@ -237,6 +240,9 @@ static class BootScreen
         readonly Font logFont, titleFont, smallFont;
         bool collected, finished;
         int readyTicks;
+        readonly DateTime opened = DateTime.UtcNow;
+        System.Windows.Media.MediaPlayer sound;
+        double soundVolume;
 
         public Screen(Thread worker, Color accent, Color back, string version)
         {
@@ -278,8 +284,82 @@ static class BootScreen
             tick.Start();
 
             Cursor.Hide();
+            StartSound();
             KeyDown += (s, a) => Close();
             MouseDown += (s, a) => Close();
+        }
+
+        // The boot sound, if there is one. MediaPlayer rather than PlaySound
+        // because it reads mp3 as happily as wav and can play it faster than
+        // recorded, which a boot animation written for a film-length intro
+        // badly needs.
+        void StartSound()
+        {
+            string file = BootSoundFile();
+            if (file == null) return;
+            try
+            {
+                sound = new System.Windows.Media.MediaPlayer();
+                sound.Open(new Uri(file));
+                sound.SpeedRatio = BootSoundSpeed();
+                soundVolume = 0.85;
+                sound.Volume = soundVolume;
+                sound.Play();
+            }
+            catch { sound = null; }
+        }
+
+        // Fade rather than cut: stopping a 40-second track four seconds in
+        // sounds like a fault, and a fade sounds like an ending.
+        void FadeAndStop()
+        {
+            if (sound == null) return;
+            try
+            {
+                var player = sound;
+                sound = null;
+                var fade = new System.Windows.Forms.Timer();
+                fade.Interval = 40;
+                fade.Tick += (s, a) =>
+                {
+                    soundVolume -= 0.12;
+                    if (soundVolume <= 0)
+                    {
+                        fade.Stop();
+                        try { player.Stop(); player.Close(); } catch { }
+                        return;
+                    }
+                    try { player.Volume = soundVolume; } catch { }
+                };
+                fade.Start();
+            }
+            catch { }
+        }
+
+        // Your own recording if you have one, otherwise the one we render.
+        // A boot animation ripped from a game is not ours to ship, so it is
+        // only ever read from assets\sounds\ -- which the repository ignores,
+        // the same arrangement as eDEX-UI's own typeface.
+        static string BootSoundFile()
+        {
+            var tried = new List<string>();
+            string custom = EdexTron.Str("bootsound", "");
+            if (custom.Length > 0) tried.Add(Environment.ExpandEnvironmentVariables(custom));
+            string sounds = Path.Combine(EdexTron.ProjectRoot, "assets", "sounds");
+            foreach (string name in new[] { "boot.mp3", "boot.wav", "boot.wma", "boot.m4a" })
+                tried.Add(Path.Combine(sounds, name));
+            tried.Add(Path.Combine(sounds, "gen", "boot.wav"));
+            foreach (string f in tried)
+            {
+                try { if (File.Exists(f)) return f; } catch { }
+            }
+            return null;
+        }
+
+        static double BootSoundSpeed()
+        {
+            double v = EdexTron.Number("bootsoundspeed", 1.6);
+            return (v >= 0.25 && v <= 4.0) ? v : 1.6;
         }
 
         static bool Installed(string family)
@@ -317,7 +397,17 @@ static class BootScreen
                 Invalidate();
                 return;
             }
-            if (++readyTicks > 16) Close();     // ~0.7s on the READY frame
+            // Hold the READY frame, but also give the boot sound long enough to
+            // be a boot sound. On a fast machine everything is collected and the
+            // HUD is up inside two seconds, which is not an entrance.
+            double shown = (DateTime.UtcNow - opened).TotalSeconds;
+            if (++readyTicks > 16 && (sound == null || shown >= MinSeconds)) Close();
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            FadeAndStop();
+            base.OnFormClosing(e);
         }
 
         protected override void OnPaint(PaintEventArgs e)

@@ -116,6 +116,16 @@ try {
                  '/reference:System.Windows.Forms.dll',
                  '/reference:System.Drawing.dll',
                  '/reference:System.ServiceProcess.dll')
+    # MediaPlayer, for the boot sound: it reads mp3 as well as wav and can
+    # play faster than recorded. These two live in a WPF subfolder that csc
+    # does not search, so they go in by full path.
+    $wpf = Join-Path (Split-Path $csc -Parent) 'WPF'
+    foreach ($dll in 'PresentationCore.dll', 'WindowsBase.dll') {
+        $path = Join-Path $wpf $dll
+        if (Test-Path $path) { $cscArgs += "/reference:$path" }
+        else { Write-Warning "$dll not found; the boot screen will be silent" }
+    }
+
     if (Test-Path $icon) { $cscArgs += "/win32icon:$icon" }
     else { Write-Warning "No icon at $icon - run src\tools\gen_icon.py first" }
 
