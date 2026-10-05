@@ -78,7 +78,7 @@ $tokens = @{
     '%%VERSION%%'        = $version
 }
 
-$sources = @('launcher.cs', 'BootScreen.cs', 'SettingsForm.cs') |
+$sources = @('launcher.cs', 'BootScreen.cs', 'SettingsForm.cs', 'KeyAudio.cs') |
            ForEach-Object { Join-Path $PSScriptRoot $_ }
 foreach ($s in $sources) {
     if (-not (Test-Path $s)) { throw "missing source file: $s" }

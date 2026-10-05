@@ -463,21 +463,9 @@ static class EdexTron
             if (keyHook == IntPtr.Zero) return;
             try
             {
-                // From the file, synchronously. SND_MEMORY was the obvious
-                // choice -- no disk in the keystroke path -- but on the machine
-                // this was developed against it returns success and makes no
-                // sound at all, while the identical wav played from its path is
-                // perfectly audible. Since this runs on its own thread and not
-                // in the hook, blocking here costs nothing: Windows caches the
-                // file, and a keystroke that arrives mid-click just sets the
-                // event again.
-                bool ok = PlaySoundW(keySoundFile, IntPtr.Zero,
-                                     SND_FILENAME | SND_NODEFAULT);
-                // Say how the first few went and then be quiet. Without this
-                // there is no way to tell a hook that never fires from a sound
-                // that never plays, and they need completely different fixes.
-                if (++keyPlays <= 3)
-                    Log("key click " + keyPlays + ": PlaySound returned " + ok);
+                if (KeyAudio.Ready) KeyAudio.Play();
+                else PlaySoundW(keySoundFile, IntPtr.Zero, SND_FILENAME | SND_NODEFAULT);
+                if (++keyPlays <= 3) Log("key click " + keyPlays + " played");
             }
             catch (Exception ex)
             {
@@ -496,6 +484,11 @@ static class EdexTron
             return;
         }
         keySoundFile = KeySound;
+        // The proper player: device opened once, several variants, overlapping
+        // voices. PlaySound stays as the fallback for a wav it cannot read.
+        string problem;
+        if (!KeyAudio.Start(KeySound, out problem))
+            Log("key clicks: falling back to PlaySound (" + problem + ")");
         keyRang = new AutoResetEvent(false);
         keyHookProc = OnKey;
         keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyHookProc, IntPtr.Zero, 0);
@@ -508,7 +501,8 @@ static class EdexTron
         keyPlayer = new Thread(PlayClicks);
         keyPlayer.IsBackground = true;
         keyPlayer.Start();
-        Log("key clicks on, playing " + KeySound);
+        Log("key clicks on, playing " + KeySound
+            + (KeyAudio.Ready ? " (waveOut, 6 variants)" : " (PlaySound)"));
     }
 
     static void StopKeyClicks()
@@ -517,6 +511,7 @@ static class EdexTron
         UnhookWindowsHookEx(keyHook);
         keyHook = IntPtr.Zero;
         if (keyRang != null) keyRang.Set();      // let the player thread end
+        KeyAudio.Stop();
     }
 
     // ------------------------------------------------------------------- log ---
