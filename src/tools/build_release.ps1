@@ -71,5 +71,9 @@ if ($LASTEXITCODE -ne 0) { throw "csc failed:`n$($out | Out-String)" }
 $sums = Get-ChildItem $dist -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
     '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
 }
-$sums | Set-Content (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii
+# LF, not CRLF: GNU sha256sum -c treats a trailing carriage return as part of
+# the filename, so a CRLF file fails to verify everywhere except Windows.
+[IO.File]::WriteAllText((Join-Path $dist 'SHA256SUMS.txt'),
+                        ($sums -join "`n") + "`n",
+                        (New-Object Text.UTF8Encoding $false))
 $sums
