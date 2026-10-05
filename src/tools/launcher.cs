@@ -80,6 +80,7 @@ static class EdexTron
     [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] static extern bool SystemParametersInfoW(uint action, uint param, ref RECT r, uint winIni);
     [DllImport("winmm.dll", CharSet = CharSet.Unicode)] static extern bool PlaySoundW(string snd, IntPtr mod, uint flags);
+    [DllImport("winmm.dll", EntryPoint = "PlaySoundW")] static extern bool PlaySoundMem(IntPtr snd, IntPtr mod, uint flags);
     [DllImport("kernel32.dll")] static extern ulong GetTickCount64();
     [DllImport("kernel32.dll")] static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX s);
 
@@ -113,7 +114,8 @@ static class EdexTron
     const uint MOD_ALT = 0x0001, MOD_WIN = 0x0008, MOD_NOREPEAT = 0x4000;
     const int WH_KEYBOARD_LL = 13;
     const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104;
-    const uint SND_ASYNC = 0x0001, SND_NODEFAULT = 0x0002, SND_FILENAME = 0x00020000;
+    const uint SND_ASYNC = 0x0001, SND_NODEFAULT = 0x0002, SND_MEMORY = 0x0004,
+               SND_FILENAME = 0x00020000;
 
     // --------------------------------------------------------- theme.json ----
     // Flat JSON, read with a regex rather than a serializer: csc has no JSON
@@ -426,9 +428,16 @@ static class EdexTron
     // "keyclick": true.
     static IntPtr keyHook = IntPtr.Zero;
     static HookProc keyHookProc;             // a field, or the GC collects it
-    static string keySoundFile;
+    static GCHandle keySoundPin;             // the wav, held still for SND_MEMORY
+    static AutoResetEvent keyRang;
+    static Thread keyPlayer;
     static int keyLastTick;
 
+    // A low-level keyboard hook has to return promptly: take longer than
+    // LowLevelHooksTimeout (300ms by default) and Windows quietly unhooks you,
+    // and the clicks stop until something re-installs them. So this does no
+    // work at all -- no disk, no audio call -- it just nudges a thread that
+    // does. That is what the "sometimes it works" came down to.
     static IntPtr OnKey(int code, IntPtr wp, IntPtr lp)
     {
         if (code >= 0 && ((int)wp == WM_KEYDOWN || (int)wp == WM_SYSKEYDOWN))
@@ -438,10 +447,27 @@ static class EdexTron
             if (now - keyLastTick >= 25)
             {
                 keyLastTick = now;
-                PlaySoundW(keySoundFile, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+                keyRang.Set();
             }
         }
         return CallNextHookEx(keyHook, code, wp, lp);
+    }
+
+    static void PlayClicks()
+    {
+        while (true)
+        {
+            keyRang.WaitOne();
+            if (keyHook == IntPtr.Zero) return;
+            try
+            {
+                // From memory, not from the file: the sound is played on every
+                // keystroke and the disk has no business in that path.
+                PlaySoundMem(keySoundPin.AddrOfPinnedObject(), IntPtr.Zero,
+                             SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+            }
+            catch { }
+        }
     }
 
     static void StartKeyClicks()
@@ -453,13 +479,29 @@ static class EdexTron
                 + (KeySound.Length == 0 ? "(none built in)" : KeySound));
             return;
         }
-        keySoundFile = KeySound;
+        try
+        {
+            keySoundPin = GCHandle.Alloc(File.ReadAllBytes(KeySound), GCHandleType.Pinned);
+        }
+        catch (Exception ex)
+        {
+            Log("key clicks wanted, but the sound would not load: " + ex.Message);
+            return;
+        }
+        keyRang = new AutoResetEvent(false);
         keyHookProc = OnKey;
         keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyHookProc, IntPtr.Zero, 0);
-        Log(keyHook != IntPtr.Zero
-            ? "key clicks on, playing " + keySoundFile
-            : "key clicks wanted, but the keyboard hook was refused (error "
-              + Marshal.GetLastWin32Error() + ")");
+        if (keyHook == IntPtr.Zero)
+        {
+            Log("key clicks wanted, but the keyboard hook was refused (error "
+                + Marshal.GetLastWin32Error() + ")");
+            keySoundPin.Free();
+            return;
+        }
+        keyPlayer = new Thread(PlayClicks);
+        keyPlayer.IsBackground = true;
+        keyPlayer.Start();
+        Log("key clicks on, playing " + KeySound + " from memory");
     }
 
     static void StopKeyClicks()
@@ -467,6 +509,8 @@ static class EdexTron
         if (keyHook == IntPtr.Zero) return;
         UnhookWindowsHookEx(keyHook);
         keyHook = IntPtr.Zero;
+        if (keyRang != null) keyRang.Set();      // let the player thread end
+        if (keySoundPin.IsAllocated) keySoundPin.Free();
     }
 
     // ------------------------------------------------------------------- log ---

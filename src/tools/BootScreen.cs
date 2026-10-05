@@ -243,6 +243,7 @@ static class BootScreen
         readonly DateTime opened = DateTime.UtcNow;
         System.Windows.Media.MediaPlayer sound;
         double soundVolume;
+        volatile bool soundStarted;
 
         public Screen(Thread worker, Color accent, Color back, string version)
         {
@@ -296,17 +297,28 @@ static class BootScreen
         void StartSound()
         {
             string file = BootSoundFile();
-            if (file == null) return;
+            if (file == null) { soundStarted = true; return; }   // nothing to wait for
             try
             {
                 sound = new System.Windows.Media.MediaPlayer();
+                // Open is asynchronous: playback cannot start until the media
+                // is ready, so Play goes in the handler rather than racing it.
+                sound.MediaOpened += (s, a) =>
+                {
+                    try
+                    {
+                        sound.SpeedRatio = BootSoundSpeed();
+                        soundVolume = 0.85;
+                        sound.Volume = soundVolume;
+                        sound.Play();
+                    }
+                    catch { }
+                    soundStarted = true;
+                };
+                sound.MediaFailed += (s, a) => { sound = null; soundStarted = true; };
                 sound.Open(new Uri(file));
-                sound.SpeedRatio = BootSoundSpeed();
-                soundVolume = 0.85;
-                sound.Volume = soundVolume;
-                sound.Play();
             }
-            catch { sound = null; }
+            catch { sound = null; soundStarted = true; }
         }
 
         // Fade rather than cut: stopping a 40-second track four seconds in
@@ -374,6 +386,11 @@ static class BootScreen
 
         void Step()
         {
+            // Hold the log until the sound is actually playing, so the two
+            // start together. Opening the media takes however long it takes;
+            // racing it just means the screen is always ahead of the audio.
+            if (!soundStarted && (DateTime.UtcNow - opened).TotalSeconds < 2.0) return;
+
             Line next = null;
             lock (pending) if (pending.Count > 0) next = pending.Dequeue();
 
