@@ -347,6 +347,40 @@ MTSM=RJSPBS
     Write-Ok "Theme file written ($argb) -> $themeFile"
 }
 
+function Register-AppEntry {
+    # Put the theme in Apps & features, so it can be uninstalled the way
+    # everything else is -- and so a package manager can see that it is
+    # installed, which version, and how to remove it. Per-user (HKCU), because
+    # that is where the whole theme lives and none of it needs admin.
+    Write-Step 'Registering in Apps & features'
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\eDEX-Tron'
+    $ver = '0.0.0'
+    $verFile = Join-Path $Root 'VERSION'
+    if (Test-Path $verFile) { $ver = (Get-Content $verFile | Select-Object -First 1).Trim() }
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+
+    New-Item -Path $key -Force | Out-Null
+    Set-ItemProperty $key 'DisplayName'     'eDEX-Tron'
+    Set-ItemProperty $key 'DisplayVersion'  $ver
+    Set-ItemProperty $key 'Publisher'       'MTV29'
+    Set-ItemProperty $key 'InstallLocation' $Root
+    Set-ItemProperty $key 'URLInfoAbout'    'https://github.com/MTV29/eDEX-Tron'
+    Set-ItemProperty $key 'UninstallString' `
+        "`"$ps`" -NoProfile -ExecutionPolicy Bypass -File `"$Root\src\uninstall.ps1`""
+    $exe = Join-Path $Root 'eDEX-Tron.exe'
+    if (Test-Path $exe) { Set-ItemProperty $key 'DisplayIcon' $exe }
+    # There is nothing to modify or repair from Apps & features; the settings
+    # window and "eDEX-Tron.exe repair" are where those live.
+    Set-ItemProperty $key 'NoModify' 1 -Type DWord
+    Set-ItemProperty $key 'NoRepair' 1 -Type DWord
+    try {
+        $kb = [int](((Get-ChildItem $Root -Recurse -File -ErrorAction SilentlyContinue |
+                      Measure-Object Length -Sum).Sum) / 1KB)
+        if ($kb -gt 0) { Set-ItemProperty $key 'EstimatedSize' $kb -Type DWord }
+    } catch { }
+    Write-Ok "Listed as eDEX-Tron $ver in Apps & features"
+}
+
 function Install-Sounds {
     if (-not $Sounds) {
         Write-Warn2 'Sound scheme skipped (pass -Sounds to enable it)'
@@ -538,6 +572,8 @@ Install-Rainmeter
 Start-Sleep -Seconds 5
 Set-Appearance
 Broadcast-SettingChange
+
+Register-AppEntry
 
 Write-Host ''
 Write-Host '  Done. Run uninstall.ps1 to revert everything.' -ForegroundColor Cyan

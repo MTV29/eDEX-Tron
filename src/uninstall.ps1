@@ -199,6 +199,13 @@ if (-not $KeepFonts) {
     }
 }
 
+# ------------------------------------------------------- Apps & features
+$arp = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\eDEX-Tron'
+if (Test-Path $arp) {
+    Remove-Item $arp -Recurse -Force
+    Write-Ok 'Removed the Apps & features entry'
+}
+
 # ------------------------------------------------------------------- assets
 Write-Step 'Removing installed assets'
 foreach ($sub in 'wallpaper', 'sounds') {

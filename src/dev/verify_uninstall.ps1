@@ -53,6 +53,9 @@ $RegistryValues = @(
     @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent', 'AccentPalette'),
     @('HKCU:\Software\Microsoft\Office\16.0\Common', 'UI Theme'),
     @('HKCU:\AppEvents\Schemes', '(default)'),
+    # The Apps & features entry install.ps1 adds, which uninstall must remove.
+    @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\eDEX-Tron', 'DisplayName'),
+    @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\eDEX-Tron', 'UninstallString'),
     # Explorer's own setting for hidden desktop icons: the launcher toggles the
     # icons through a window message, which must not leave this changed.
     @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced', 'HideIcons')

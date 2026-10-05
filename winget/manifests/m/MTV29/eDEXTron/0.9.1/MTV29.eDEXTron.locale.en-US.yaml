@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: MTV29.eDEXTron
+PackageVersion: 0.9.1
+PackageLocale: en-US
+Publisher: MTV29
+PublisherUrl: https://github.com/MTV29
+PublisherSupportUrl: https://github.com/MTV29/eDEX-Tron/issues
+PackageName: eDEX-Tron
+PackageUrl: https://github.com/MTV29/eDEX-Tron
+License: GPL-3.0-only
+LicenseUrl: https://github.com/MTV29/eDEX-Tron/blob/main/LICENSE
+Copyright: Copyright (c) MTV29
+ShortDescription: A sci-fi desktop theme for Windows, inspired by eDEX-UI.
+Description: |-
+  eDEX-Tron brings the look of eDEX-UI, the sci-fi terminal interface by
+  Gabriel "Squared" Saillard, to the whole Windows desktop while you carry on
+  using Windows normally.
+
+  A live HUD sits behind your windows with the clock, per-core CPU graphs, a
+  memory map, network status and usage, the top processes, and optional disk,
+  listening-port and graphics-card panels. A Command Prompt is framed as the
+  main shell and kept in place. A dock holds your apps, and icon grids mirror
+  your Desktop and a folder of your choosing. Windows, Windows Terminal,
+  VS Code and Office are darkened to one accent colour you can change from a
+  settings window or a single command.
+
+  The layout is worked out from your resolution and scaling rather than
+  hard-coded, and re-planned by itself when the screen changes. Everything it
+  changes is backed up first and reverted by its uninstaller.
+
+  An independent fan project, not affiliated with or endorsed by eDEX-UI.
+Moniker: edex-tron
+Tags:
+  - customization
+  - desktop
+  - edex-ui
+  - hud
+  - rainmeter
+  - sci-fi
+  - theme
+  - widgets
+ReleaseNotesUrl: https://github.com/MTV29/eDEX-Tron/releases/tag/v0.9.1
+Documentations:
+  - DocumentLabel: README
+    DocumentUrl: https://github.com/MTV29/eDEX-Tron/blob/main/README.md
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

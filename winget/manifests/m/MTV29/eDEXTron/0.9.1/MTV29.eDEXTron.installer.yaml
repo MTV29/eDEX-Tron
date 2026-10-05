@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: MTV29.eDEXTron
+PackageVersion: 0.9.1
+MinimumOSVersion: 10.0.19041.0
+# Everything lands in Documents\eDEX-Tron and HKCU; nothing needs admin, though
+# the helper apps it installs through winget may prompt for their own.
+Scope: user
+InstallerType: exe
+InstallerSwitches:
+  Silent: /S
+  SilentWithProgress: /S
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ReleaseDate: 2026-10-05
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/MTV29/eDEX-Tron/releases/download/v0.9.1/eDEX-Tron-Setup-v0.9.1.exe
+    InstallerSha256: 1E3761C17CD61C8C6C66379BE4C7586B0D66E1335B6836BE7D697ECA8891F8D6
+ManifestType: installer
+ManifestVersion: 1.6.0
