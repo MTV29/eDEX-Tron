@@ -39,7 +39,14 @@ def envelope(samples, step_ms=5.0):
 
 
 def find_hits(samples, floor=0.05, gap_ms=90):
-    """Where each press starts: a jump past `floor`, ignoring the ring after."""
+    """Where each press starts: a jump past `floor`, ignoring the ring after.
+
+    `gap_ms` is how long after one press to stop looking for the next. Set it
+    too high on a recording of fast typing and several presses are treated as
+    one, so the clip taken from it contains all of them -- which plays as
+    several clicks per keystroke. Check the result with --report before
+    trusting it.
+    """
     gap = int(RATE * gap_ms / 1000.0)
     hits = []
     i = 0
@@ -93,6 +100,23 @@ def normalise(clip, peak):
     return [v / loudest * peak for v in clip]
 
 
+def describe(clip):
+    """Print the clip's shape, and say so if it holds more than one press."""
+    env, win = envelope(clip)
+    print('   envelope: ' + ' '.join(f'{v:.2f}' for v in env))
+    extra = [i for i in range(1, len(env) - 1)
+             if env[i] > 0.25 and env[i] >= env[i - 1] and env[i] > env[i + 1]]
+    # A smooth swell peaks once; a clip with two presses in it peaks twice with
+    # a dip between, and plays as two clicks for every key.
+    dips = [i for i in extra if min(env[:i] or [1.0]) < env[i] * 0.4]
+    if dips:
+        print('   WARNING: ' + str(len(dips) + 1) + ' separate transients -- this '
+              'will sound like that many clicks per keystroke.')
+        print('   Use a shorter --length, or a different --index.')
+    else:
+        print('   one transient: good for a keystroke')
+
+
 def write_wav(path, samples):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     frames = b''.join(struct.pack('<h', int(max(-1.0, min(1.0, v)) * 32767))
@@ -116,6 +140,9 @@ def main():
     ap.add_argument('--peak', type=float, default=0.85, help='level to normalise to')
     ap.add_argument('--floor', type=float, default=0.05, help='what counts as a press')
     ap.add_argument('--play', action='store_true', help='play the result')
+    ap.add_argument('--report', action='store_true',
+                    help="show the result's envelope, and warn if it holds "
+                         "more than one transient")
     ap.add_argument('--whole', action='store_true',
                     help='the file is already one sound: just trim the silence '
                          'off each end and bring the level up')
@@ -139,6 +166,8 @@ def main():
         clip = normalise(clip, a.peak)
         n = write_wav(a.out, clip)
         print(f'{n} frames, {n / RATE * 1000:.0f} ms, peak {a.peak:.2f} -> {a.out}')
+        if a.report:
+            describe(clip)
         if a.play:
             import winsound
             for _ in range(5):
@@ -168,6 +197,8 @@ def main():
     clip = normalise(extract(samples, chosen, length_ms=a.length), a.peak)
     n = write_wav(a.out, clip)
     print(f'{n} frames, {n / RATE * 1000:.0f} ms, peak {a.peak:.2f} -> {a.out}')
+    if a.report:
+        describe(clip)
 
     if a.play:
         import winsound
