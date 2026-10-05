@@ -453,6 +453,8 @@ static class EdexTron
         return CallNextHookEx(keyHook, code, wp, lp);
     }
 
+    static int keyPlays;
+
     static void PlayClicks()
     {
         while (true)
@@ -463,10 +465,18 @@ static class EdexTron
             {
                 // From memory, not from the file: the sound is played on every
                 // keystroke and the disk has no business in that path.
-                PlaySoundMem(keySoundPin.AddrOfPinnedObject(), IntPtr.Zero,
-                             SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+                bool ok = PlaySoundMem(keySoundPin.AddrOfPinnedObject(), IntPtr.Zero,
+                                       SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+                // Say how the first few went and then be quiet. Without this
+                // there is no way to tell a hook that never fires from a sound
+                // that never plays, and they need completely different fixes.
+                if (++keyPlays <= 3)
+                    Log("key click " + keyPlays + ": PlaySound returned " + ok);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                if (++keyPlays <= 3) Log("key click failed: " + ex.Message);
+            }
         }
     }
 
@@ -520,7 +530,7 @@ static class EdexTron
     // gets long, so it can be left alone forever.
     static readonly object logLock = new object();
 
-    static void Log(string message)
+    internal static void Log(string message)
     {
         try
         {

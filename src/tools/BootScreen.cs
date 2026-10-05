@@ -297,7 +297,12 @@ static class BootScreen
         void StartSound()
         {
             string file = BootSoundFile();
-            if (file == null) { soundStarted = true; return; }   // nothing to wait for
+            if (file == null)
+            {
+                EdexTron.Log("no boot sound found");
+                soundStarted = true;                             // nothing to wait for
+                return;
+            }
             try
             {
                 sound = new System.Windows.Media.MediaPlayer();
@@ -311,11 +316,18 @@ static class BootScreen
                         soundVolume = 0.85;
                         sound.Volume = soundVolume;
                         sound.Play();
+                        EdexTron.Log("boot sound playing at " + sound.SpeedRatio
+                                     + "x, " + sound.NaturalDuration);
                     }
-                    catch { }
+                    catch (Exception ex) { EdexTron.Log("boot sound: " + ex.Message); }
                     soundStarted = true;
                 };
-                sound.MediaFailed += (s, a) => { sound = null; soundStarted = true; };
+                sound.MediaFailed += (s, a) =>
+                {
+                    EdexTron.Log("boot sound failed: " + a.ErrorException.Message);
+                    sound = null;
+                    soundStarted = true;
+                };
                 sound.Open(new Uri(file));
             }
             catch { sound = null; soundStarted = true; }
