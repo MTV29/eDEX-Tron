@@ -100,6 +100,17 @@ Step 'accepting the winget source agreements' {
     winget list --accept-source-agreements --count 1 2>&1 | Select-Object -First 2
 }
 
+# A winget installed moments ago has no package index yet, and every install
+# then fails with the same source-level error. A real Windows 11 has had its
+# sources since first boot, so this is the sandbox catching up rather than
+# anything the installer should have to do.
+Step 'making winget fetch its package index' {
+    winget source reset --force 2>&1 | Select-Object -Last 2
+    winget source update 2>&1 | Select-Object -Last 4
+    'can winget find Rainmeter now?'
+    winget show --id Rainmeter.Rainmeter --exact --accept-source-agreements 2>&1 | Select-Object -First 3
+}
+
 # --- the actual test --------------------------------------------------------
 $setup = Get-ChildItem 'C:\installer\eDEX-Tron-Setup-*.exe' | Select-Object -First 1
 Say "=== running $($setup.Name) /S  (this is the slow part)"
