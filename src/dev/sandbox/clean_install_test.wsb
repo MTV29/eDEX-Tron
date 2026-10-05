@@ -1,0 +1,39 @@
+<Configuration>
+  <!--
+    A clean Windows to install eDEX-Tron on. Everything this project has ever
+    been installed on already had Rainmeter, Python and the fonts; this is a
+    machine that has had none of them, which is the only way to find out what
+    setup assumes.
+
+    Double-click this file, or:
+        WindowsSandbox.exe src\dev\sandbox\clean_install_test.wsb
+
+    The sandbox is thrown away when the window closes, so nothing it does can
+    reach the real machine except through the mapped output folder below.
+  -->
+  <MappedFolders>
+    <MappedFolder>
+      <!-- the installer under test, read-only -->
+      <HostFolder>C:\Users\MTV\Documents\eDEX-Tron\dist</HostFolder>
+      <SandboxFolder>C:\installer</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <!-- the script to run, read-only -->
+      <HostFolder>C:\Users\MTV\Documents\eDEX-Tron\src\dev\sandbox</HostFolder>
+      <SandboxFolder>C:\script</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <!-- writable, so the log survives the sandbox closing -->
+      <HostFolder>C:\Users\MTV\Documents\eDEX-Tron\runtime\sandbox-out</HostFolder>
+      <SandboxFolder>C:\out</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <Networking>Enable</Networking>
+  <MemoryInMB>6144</MemoryInMB>
+  <LogonCommand>
+    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File C:\script\run_in_sandbox.ps1</Command>
+  </LogonCommand>
+</Configuration>

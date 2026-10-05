@@ -28,6 +28,16 @@ $Root  = Split-Path -Parent $PSScriptRoot
 $tools = Join-Path $PSScriptRoot 'tools'
 $version = (Get-Content (Join-Path $Root 'VERSION') -ErrorAction SilentlyContinue | Select-Object -First 1)
 
+# An unattended install has no window to watch, so when it goes wrong there is
+# nothing to look at. Keep a transcript; it is the only account of what
+# happened for anyone installing through winget or a deployment script.
+if ($Unattended) {
+    try {
+        New-Item -ItemType Directory -Force -Path (Join-Path $Root 'runtime') | Out-Null
+        Start-Transcript -Path (Join-Path $Root 'runtime\setup.log') -Force | Out-Null
+    } catch { }
+}
+
 function Step($n, $msg) { Write-Host "`n[$n/7] $msg" -ForegroundColor Cyan }
 function Ok($msg)       { Write-Host "      $msg" -ForegroundColor DarkCyan }
 function Warn($msg)     { Write-Host "      $msg" -ForegroundColor Yellow }
