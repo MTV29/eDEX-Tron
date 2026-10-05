@@ -498,6 +498,167 @@ def toplist(interval=30):
     """).strip()])
 
 
+# -------------------------------------------------------------------- DISK ---
+def disk(drives):
+    """Free space per fixed drive, as a used-space bar with the free figure.
+
+    FreeDiskSpace is native, so unlike the ports and GPU panels this one needs
+    no helper script. Update is slow (5s): disk figures do not move fast.
+    """
+    out = [skin_header(update=5000), header('Disk', 'diskinfo')]
+    bar_x = PAD + 28
+    bar_w = W - PAD * 2 - 28 - 76
+    for i, letter in enumerate(drives):
+        out.append(textwrap.dedent(f"""
+        [MeasureFree{letter}]
+        Measure=FreeDiskSpace
+        Drive={letter}:
+
+        [MeasureTotal{letter}]
+        Measure=FreeDiskSpace
+        Drive={letter}:
+        Total=1
+
+        [MeasureUsed{letter}]
+        Measure=Calc
+        Formula=(MeasureTotal{letter} - MeasureFree{letter}) / MeasureTotal{letter} * 100
+        MinValue=0
+        MaxValue=100
+
+        [MeterDrive{letter}]
+        Meter=String
+        X={PAD}
+        Y={'10R' if i == 0 else '12R'}
+        FontFace=#FontMain#
+        FontSize={FS_LABEL}
+        FontColor=#Accent#,{A_VAL}
+        StringCase=Upper
+        AntiAlias=1
+        Text={letter}:
+
+        [MeterDriveBarBg{letter}]
+        Meter=Shape
+        X={bar_x}
+        Y=5r
+        Shape=Rectangle 0,0,{bar_w},3 | Fill Color #Accent#,90 | StrokeWidth 0
+
+        [MeterDriveBar{letter}]
+        Meter=Bar
+        MeasureName=MeasureUsed{letter}
+        X={bar_x}
+        Y=0r
+        W={bar_w}
+        H=3
+        BarColor=#Accent#,255
+
+        [MeterDriveFree{letter}]
+        Meter=String
+        MeasureName=MeasureFree{letter}
+        X={W - PAD}
+        Y=-6r
+        FontFace=#FontLight#
+        FontSize={FS_LABEL}
+        FontColor=#Accent#,{A_LABEL}
+        StringAlign=Right
+        AutoScale=1
+        NumOfDecimals=1
+        AntiAlias=1
+        Text=%1 free
+        """).strip())
+    return '\n\n'.join(out)
+
+
+# ------------------------------------------------------------------- PORTS ---
+def ports(interval=60, rows=5):
+    """Listening TCP ports and the processes holding them.
+
+    Rainmeter has no port measure, so @Resources/ports.ps1 samples it on the
+    same RunCommand + timer pattern as the process list.
+    """
+    hdr = skin_header(extra='OnRefreshAction=[!CommandMeasure MeasurePorts "Run"]')
+    return '\n\n'.join([hdr, header('Open Ports', 'listening'), textwrap.dedent(f"""
+    [MeasurePorts]
+    Measure=Plugin
+    Plugin=RunCommand
+    Program=powershell
+    Parameter=-NoProfile -ExecutionPolicy Bypass -File "#@#ports.ps1" -Rows {rows}
+    OutputType=ANSI
+    State=Hide
+    FinishAction=[!UpdateMeter MeterPortsTable][!Redraw]
+
+    ; RunCommand only executes when sent "Run"; this ticks the timer.
+    [MeasurePortsTrigger]
+    Measure=Calc
+    Formula=1
+    UpdateDivider={interval}
+    OnUpdateAction=[!CommandMeasure MeasurePorts "Run"]
+
+    [MeterPortsHead]
+    Meter=String
+    X={PAD}
+    Y=10R
+    FontFace=#FontLight#
+    FontSize={FS_LABEL}
+    FontColor=#Accent#,{A_LABEL}
+    StringCase=Upper
+    AntiAlias=1
+    Text=Port | Process
+
+    [MeterPortsTable]
+    Meter=String
+    MeasureName=MeasurePorts
+    X={PAD}
+    Y=6R
+    W={W - PAD * 2}
+    FontFace=#FontMono#
+    FontSize={FS_MONO}
+    FontColor=#Accent#,235
+    AntiAlias=1
+    ClipString=1
+    Text=%1
+    """).strip()])
+
+
+# --------------------------------------------------------------------- GPU ---
+def gpu(name='', interval=10):
+    """Load, memory and temperature of the graphics card.
+
+    @Resources/gpu.ps1 prefers nvidia-smi and falls back to the GPU Engine
+    performance counters, so the panel still fills in on an AMD or Intel part
+    (without a temperature, which only the vendor tools expose).
+    """
+    hdr = skin_header(extra='OnRefreshAction=[!CommandMeasure MeasureGpu "Run"]')
+    return '\n\n'.join([hdr, header('Graphics', name or 'gpu'), textwrap.dedent(f"""
+    [MeasureGpu]
+    Measure=Plugin
+    Plugin=RunCommand
+    Program=powershell
+    Parameter=-NoProfile -ExecutionPolicy Bypass -File "#@#gpu.ps1"
+    OutputType=ANSI
+    State=Hide
+    FinishAction=[!UpdateMeter MeterGpuTable][!Redraw]
+
+    [MeasureGpuTrigger]
+    Measure=Calc
+    Formula=1
+    UpdateDivider={interval}
+    OnUpdateAction=[!CommandMeasure MeasureGpu "Run"]
+
+    [MeterGpuTable]
+    Meter=String
+    MeasureName=MeasureGpu
+    X={PAD}
+    Y=10R
+    W={W - PAD * 2}
+    FontFace=#FontMono#
+    FontSize={FS_MONO}
+    FontColor=#Accent#,235
+    AntiAlias=1
+    ClipString=1
+    Text=%1
+    """).strip()])
+
+
 # ----------------------------------------------------------------- NETSTAT ---
 def netstat():
     """eDEX's network status strip: state, address, latency."""
@@ -778,6 +939,10 @@ def main():
     p.add_argument('--folder', default=os.path.join(
         os.environ.get('USERPROFILE', 'C:\\'), 'Desktop', 'Games'),
         help='folder the Folder panel mirrors')
+    p.add_argument('--drives', default='C',
+                   help='comma-separated drive letters for the Disk panel')
+    p.add_argument('--gpu-name', default='',
+                   help='short card name, shown in the GPU panel caption')
     p.add_argument('--config', default=os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'theme.json'))
     a = p.parse_args()
@@ -807,6 +972,13 @@ def main():
         'NetStat': netstat(),
         # The Network Usage graph takes the slot eDEX gives its globe.
         'ConnInfo': conninfo(a.graph_height),
+        # Optional extras. They are always generated; whether each one is
+        # switched on is decided by theme.json "panels" and by whether the
+        # layout planner found room for it (gen_rainmeter_ini.py).
+        'Disk': disk([d.strip().rstrip(':\\').upper()
+                      for d in a.drives.split(',') if d.strip()] or ['C']),
+        'Ports': ports(),
+        'Gpu': gpu(a.gpu_name),
         # Dock, Desktop and Folder are generated by gen_dock.ps1: they need
         # icons extracted from real executables, which is a Windows API job.
         'Terminal': terminal(a.term_width, a.term_height),

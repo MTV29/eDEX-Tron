@@ -3,5 +3,11 @@
   "background": "#05080d",
   "icon": "#4f9dff",
   "grid": false,
-  "folder": "%USERPROFILE%\\Desktop\\Games"
+  "folder": "%USERPROFILE%\\Desktop\\Games",
+  "panels": [
+    "gpu",
+    "disk",
+    "ports"
+  ],
+  "off": []
 }

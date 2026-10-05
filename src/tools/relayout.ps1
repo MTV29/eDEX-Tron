@@ -81,11 +81,42 @@ $folderCount = Get-VisibleCount $folder
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'runtime') | Out-Null
 Set-Content (Join-Path $Root 'runtime\folder-path.txt') $folder -Encoding UTF8
 
+# --- which optional panels are wanted, and what they need to know -----------
+# theme.json "panels" lists the extras to switch on; "off" switches any of the
+# standard side panels off and gives their space back to the rest. The planner
+# decides what actually fits.
+$panels = @('gpu', 'disk', 'ports')
+$offPanels = @()
+if ($cfg) {
+    if ($null -ne $cfg.panels) { $panels = @($cfg.panels) }
+    if ($null -ne $cfg.off)    { $offPanels = @($cfg.off) }
+}
+$drives = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' |
+            Sort-Object DeviceID | ForEach-Object { $_.DeviceID.TrimEnd(':') })
+if (-not $drives) { $drives = @('C') }
+
+# Short card name for the GPU panel's caption, the way $cpuName is shortened.
+$gpuName = ''
+$video = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+         Sort-Object { $_.Name -notmatch 'NVIDIA|AMD|Radeon' } | Select-Object -First 1
+if ($video) {
+    $gpuName = if ($video.Name -match '(RTX \w+|GTX \w+|RX \w+|Arc \w+|Iris \w+|UHD Graphics)') {
+        $Matches[1]
+    } else { $video.Name.Trim() }
+}
+if (-not $gpuName) { $gpuName = 'gpu' }
+# Empty strings get dropped on their way to a native command in PowerShell 5.1,
+# which argparse then reports as a missing value -- so only pass what is set.
+$planArgs = @('--drive-count', $drives.Count)
+if ($panels)    { $planArgs += @('--panels', ($panels -join ',')) }
+if ($offPanels) { $planArgs += @('--off', ($offPanels -join ',')) }
+
 # --- 3. plan ----------------------------------------------------------------
 New-Item -ItemType Directory -Force -Path (Split-Path $planFile) | Out-Null
 Invoke-Py (Join-Path $tools 'gen_rainmeter_ini.py') --skin-path "$skinRoot\" `
     --plan-out $planFile --screen-w $logW --work-h $logWorkH `
-    --dock-count $dockCount --desk-count $deskCount --folder-count $folderCount | ForEach-Object { "$_" }
+    --dock-count $dockCount --desk-count $deskCount --folder-count $folderCount `
+    @planArgs | ForEach-Object { "$_" }
 $plan = Get-Content $planFile -Raw | ConvertFrom-Json
 
 # --- 4. regenerate the skins at the planned sizes ---------------------------
@@ -94,7 +125,8 @@ $cpuName = if ($cpu.Name -match '(i[3579]-\w+|Ryzen \d+ \w+|Core Ultra \d \w+)')
 Invoke-Py (Join-Path $tools 'gen_skins.py') --out $srcSkins `
     --cores $cpu.NumberOfLogicalProcessors --cpu-name $cpuName `
     --width 250 --term-width $plan.term_w --term-height $plan.term_h `
-    --desktop $desktop --folder $folder --graph-height $plan.graph_h | Out-Null
+    --desktop $desktop --folder $folder --graph-height $plan.graph_h `
+    --drives ($drives -join ',') --gpu-name $gpuName | Out-Null
 
 & (Join-Path $tools 'gen_dock.ps1') -Config $dockCfg -SkinRoot $srcSkins -Cols $plan.dock_cols | Out-Null
 & (Join-Path $tools 'gen_dock.ps1') -FromFolder $desktop -SkinRoot $srcSkins -SkinName 'Desktop' `
@@ -102,6 +134,10 @@ Invoke-Py (Join-Path $tools 'gen_skins.py') --out $srcSkins `
 & (Join-Path $tools 'gen_dock.ps1') -FromFolder $folder -SkinRoot $srcSkins -SkinName 'Folder' `
     -Title (Split-Path $folder -Leaf) -Cols $plan.folder_cols -Rows $plan.folder_rows -NoEdit | Out-Null
 "skins generated: dock $($plan.dock_cols)x$($plan.dock_rows), desktop $($plan.desk_cols)x$($plan.desk_rows), $(Split-Path $folder -Leaf) $($plan.folder_cols)x$($plan.folder_rows), shell $($plan.term_w)x$($plan.term_h)"
+if ($plan.no_room) {
+    Write-Warning ("no room on this screen for: $($plan.no_room -join ', '). " +
+        'Switch another panel off in theme.json "off" to make space.')
+}
 
 # --- 5. deploy ---------------------------------------------------------------
 $running = [bool](Get-Process Rainmeter -ErrorAction SilentlyContinue)
@@ -122,7 +158,8 @@ Copy-Item $srcSkins $skinRoot -Recurse -Force
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\Rainmeter" | Out-Null
 $ini = Join-Path $Root 'build\Rainmeter.ini'
 Invoke-Py (Join-Path $tools 'gen_rainmeter_ini.py') --skin-path "$skinRoot\" --out $ini `
-    --screen-w $logW --work-h $logWorkH --dock-count $dockCount --desk-count $deskCount --folder-count $folderCount | Out-Null
+    --screen-w $logW --work-h $logWorkH --dock-count $dockCount --desk-count $deskCount `
+    --folder-count $folderCount @planArgs | Out-Null
 Copy-Item $ini "$env:APPDATA\Rainmeter\Rainmeter.ini" -Force
 
 if ((Test-Path $rmExe) -and ($running -or -not $env:EDEX_NO_START)) {
