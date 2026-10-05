@@ -31,7 +31,14 @@ def decode(path):
     return [s / 32768.0 for s in d.samples]
 
 
-def find_hits(samples, floor=0.18, gap_ms=90):
+def envelope(samples, step_ms=5.0):
+    """Peak level in each short window, which is what "loud" means here."""
+    win = max(1, int(RATE * step_ms / 1000.0))
+    return [max((abs(v) for v in samples[i:i + win]), default=0.0)
+            for i in range(0, max(0, len(samples) - win), win)], win
+
+
+def find_hits(samples, floor=0.05, gap_ms=90):
     """Where each press starts: a jump past `floor`, ignoring the ring after."""
     gap = int(RATE * gap_ms / 1000.0)
     hits = []
@@ -43,6 +50,24 @@ def find_hits(samples, floor=0.18, gap_ms=90):
         else:
             i += 1
     return hits
+
+
+def clarity(samples, start, back_ms=100.0):
+    """How far a press rises above the room it was recorded in.
+
+    Picking the *loudest* press is a trap: a phone recording has quiet
+    stretches with clean isolated presses and noisy stretches where the hum is
+    nearly as loud as the key. The loudest sample usually comes from the noisy
+    part, and normalising it afterwards just makes the hum loud too. What
+    matters is the gap between the press and the few hundred milliseconds
+    before it.
+    """
+    look = int(RATE * 0.03)
+    peak = max((abs(v) for v in samples[start:start + look]), default=0.0)
+    a = max(0, start - int(RATE * back_ms / 1000.0))
+    before = sorted(abs(v) for v in samples[a:start]) or [0.0]
+    floor = before[len(before) // 2]          # median, so one tick cannot skew it
+    return peak / max(floor, 1e-5), peak, floor
 
 
 def extract(samples, start, before_ms=4, length_ms=55):
@@ -89,7 +114,7 @@ def main():
                     help='which press to take (default: the loudest)')
     ap.add_argument('--length', type=float, default=55.0, help='milliseconds to keep')
     ap.add_argument('--peak', type=float, default=0.85, help='level to normalise to')
-    ap.add_argument('--floor', type=float, default=0.18, help='what counts as a press')
+    ap.add_argument('--floor', type=float, default=0.05, help='what counts as a press')
     ap.add_argument('--play', action='store_true', help='play the result')
     a = ap.parse_args()
 
@@ -103,15 +128,17 @@ def main():
           + ', '.join(f'{h / RATE:.2f}s' for h in hits[:12])
           + (' ...' if len(hits) > 12 else ''))
 
+    scored = sorted(((clarity(samples, h), h) for h in hits), reverse=True)
+    print('clearest presses:')
+    for (ratio, peak, floor), h in scored[:5]:
+        print(f'  {h / RATE:6.2f}s  peak {peak:.3f} over {floor:.3f}  ({ratio:.0f}x)')
+
     if a.index is not None:
         if not 0 <= a.index < len(hits):
             raise SystemExit(f'--index must be 0..{len(hits) - 1}')
         chosen = hits[a.index]
     else:
-        # The loudest press is usually the cleanest and the least clipped by
-        # whatever the recording started or ended in the middle of.
-        chosen = max(hits, key=lambda h: max(
-            (abs(v) for v in samples[h:h + int(RATE * 0.03)]), default=0.0))
+        chosen = scored[0][1]
     print(f'taking the press at {chosen / RATE:.2f}s')
 
     clip = normalise(extract(samples, chosen, length_ms=a.length), a.peak)

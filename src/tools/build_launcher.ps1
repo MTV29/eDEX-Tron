@@ -42,17 +42,21 @@ $termScript   = Join-Path $liveRes 'launch_terminal.ps1'
 $refreshScript= Join-Path $liveRes 'refresh_desktop.ps1'
 $settingsScript = Join-Path $PSScriptRoot 'settings.ps1'
 
-# The key click we render ourselves, deliberately in preference to eDEX-UI's
-# keyboard.wav even when that has been copied out of a local install: theirs is
-# a 1.2-second run of typing, not one keystroke, so restarting it on every key
-# would be a rattle rather than a click.
-$keySound = Join-Path $root 'assets\sounds\gen\key.wav'
-if (-not (Test-Path $keySound)) {
-    try { & python (Join-Path $PSScriptRoot 'gen_sounds.py') | Out-Null } catch { }
+# The key click. A recording of your own keyboard wins -- sample_click.py cuts
+# one press out of one and writes it here -- then the click we render
+# ourselves. Not eDEX-UI's keyboard.wav even where it has been copied out of a
+# local install: theirs is a 1.2-second run of typing rather than one
+# keystroke, so restarting it on every key is a rattle, not a click.
+$keySound = ''
+foreach ($candidate in @((Join-Path $root 'assets\sounds\key.wav'),
+                         (Join-Path $root 'assets\sounds\gen\key.wav'))) {
+    if (Test-Path $candidate) { $keySound = $candidate; break }
 }
-if (-not (Test-Path $keySound)) {
-    Write-Warning 'No key click sound; run src\tools\gen_sounds.py'
-    $keySound = ''
+if (-not $keySound) {
+    try { & python (Join-Path $PSScriptRoot 'gen_sounds.py') | Out-Null } catch { }
+    $generated = Join-Path $root 'assets\sounds\gen\key.wav'
+    if (Test-Path $generated) { $keySound = $generated }
+    else { Write-Warning 'No key click sound; run src\tools\gen_sounds.py' }
 }
 
 $version = '0.9.0'
