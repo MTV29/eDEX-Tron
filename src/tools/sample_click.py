@@ -116,10 +116,34 @@ def main():
     ap.add_argument('--peak', type=float, default=0.85, help='level to normalise to')
     ap.add_argument('--floor', type=float, default=0.05, help='what counts as a press')
     ap.add_argument('--play', action='store_true', help='play the result')
+    ap.add_argument('--whole', action='store_true',
+                    help='the file is already one sound: just trim the silence '
+                         'off each end and bring the level up')
     a = ap.parse_args()
 
     samples = decode(a.source)
     print(f'decoded {len(samples) / RATE:.1f}s')
+
+    if a.whole:
+        # Sounds meant to be played whole -- eDEX-UI's own set, for instance --
+        # are usually a short event padded with silence and mastered quietly.
+        # Looking for "presses" in one of those finds nothing useful.
+        quiet = max((abs(v) for v in samples), default=0.0) * 0.02
+        first = next((i for i, v in enumerate(samples) if abs(v) > quiet), 0)
+        last = next((i for i in range(len(samples) - 1, -1, -1)
+                     if abs(samples[i]) > quiet), len(samples) - 1)
+        clip = samples[max(0, first - int(RATE * 0.002)):last + int(RATE * 0.004)]
+        fade = max(1, int(RATE * 0.004))
+        for i in range(min(fade, len(clip))):
+            clip[-1 - i] *= i / fade
+        clip = normalise(clip, a.peak)
+        n = write_wav(a.out, clip)
+        print(f'{n} frames, {n / RATE * 1000:.0f} ms, peak {a.peak:.2f} -> {a.out}')
+        if a.play:
+            import winsound
+            for _ in range(5):
+                winsound.PlaySound(a.out, winsound.SND_FILENAME)
+        return
 
     hits = find_hits(samples, a.floor)
     if not hits:

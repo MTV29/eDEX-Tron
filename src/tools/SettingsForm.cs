@@ -159,6 +159,7 @@ class SettingsForm : Form
     void Reload()
     {
         current = new Dictionary<string, string>();
+        touched.Clear();
         foreach (string line in Run("-Get", 30000).Split('\n'))
         {
             int eq = line.IndexOf('=');
@@ -200,7 +201,15 @@ class SettingsForm : Form
 
     readonly ToolTip tips = new ToolTip();
 
-    CheckBox Check(string text, bool value, int x, int y, string tip = null)
+    // What the person changed in this window, as opposed to what simply
+    // differs from the values it loaded. A window left open while something
+    // else changes a setting -- the dock's own tile, settings.ps1, another
+    // copy of this window -- would otherwise write its stale view back over
+    // the newer one the moment Apply was pressed.
+    readonly HashSet<string> touched = new HashSet<string>();
+
+    CheckBox Check(string text, bool value, int x, int y, string tip = null,
+                   string field = null)
     {
         var c = new CheckBox();
         c.Text = text;
@@ -214,6 +223,7 @@ class SettingsForm : Form
         // The descriptions are long enough to collide with the next column, so
         // they live in a tooltip and the box carries the name alone.
         if (tip != null) tips.SetToolTip(c, tip);
+        if (field != null) c.CheckedChanged += (s, a) => touched.Add(field);
         return c;
     }
 
@@ -233,7 +243,7 @@ class SettingsForm : Form
         return b;
     }
 
-    Button Swatch(string hex, int x, int y, Action<string> set)
+    Button Swatch(string hex, int x, int y, string field, Action<string> set)
     {
         var b = new Button();
         b.Location = new Point(x, y);
@@ -256,6 +266,7 @@ class SettingsForm : Form
                 b.ForeColor = Readable(dlg.Color);
                 b.Text = Hex(dlg.Color);
                 set(Hex(dlg.Color));
+                touched.Add(field);
             }
         };
         Controls.Add(b);
@@ -275,13 +286,13 @@ class SettingsForm : Form
         int y = 14;
         Heading("Colours", y); y += 30;
         Note("Accent", 20, y + 4);
-        accentSwatch = Swatch(accentHex, 110, y, v => accentHex = v);
+        accentSwatch = Swatch(accentHex, 110, y, "accent", v => accentHex = v);
         Note("Background", 250, y + 4);
-        bgSwatch = Swatch(bgHex, 350, y, v => bgHex = v);
+        bgSwatch = Swatch(bgHex, 350, y, "background", v => bgHex = v);
         y += 32;
         Note("Icon", 20, y + 4);
-        iconSwatch = Swatch(iconHex, 110, y, v => iconHex = v);
-        gridBox = Check("Grid on the wallpaper", On("grid", false), 250, y + 3);
+        iconSwatch = Swatch(iconHex, 110, y, "icon", v => iconHex = v);
+        gridBox = Check("Grid on the wallpaper", On("grid", false), 250, y + 3, null, "grid");
         y += 40;
 
         Heading("Extra panels", y); y += 28;
@@ -292,7 +303,7 @@ class SettingsForm : Form
             bool fits = !noRoom.Contains(key);
             extraBoxes[key] = Check(key.ToUpperInvariant() + (fits ? "" : "  (no room)"),
                                     panelsOn.Contains(key),
-                                    20 + i * 190, y, Describe(key));
+                                    20 + i * 190, y, Describe(key), "panels");
         }
         y += 24;
         if (noRoom.Count > 0)
@@ -308,7 +319,7 @@ class SettingsForm : Form
         {
             string key = standard[i];
             standardBoxes[key] = Check(key.ToUpperInvariant(), !switchedOff.Contains(key),
-                                       20 + (i % 3) * 190, y + (i / 3) * 24, Describe(key));
+                                       20 + (i % 3) * 190, y + (i / 3) * 24, Describe(key), "off");
         }
         y += ((standard.Count + 2) / 3) * 24 + 14;
 
@@ -320,6 +331,7 @@ class SettingsForm : Form
         folderBox.BackColor = Color.FromArgb(16, 20, 28);
         folderBox.ForeColor = accent;
         folderBox.BorderStyle = BorderStyle.FixedSingle;
+        folderBox.TextChanged += (s2, a2) => touched.Add("folder");
         Controls.Add(folderBox);
         Flat("Browse", 470, y - 2, 80, (s, a) =>
         {
@@ -333,19 +345,19 @@ class SettingsForm : Form
 
         Heading("Behaviour", y); y += 28;
         keyClickBox = Check("Audible key clicks", On("keyclick", false), 20, y,
-                            "A click on every keystroke, the way eDEX-UI has one");
+                            "A click on every keystroke, the way eDEX-UI has one", "keyclick");
         hotkeysBox = Check("Hotkeys", On("hotkeys", true), 300, y,
-                           "Win+Alt+H hide the HUD, T the shell, E on/off, S these settings");
+                           "Win+Alt+H hide the HUD, T the shell, E on/off, S these settings", "hotkeys");
         y += 24;
         bootBox = Check("Boot screen at start", On("bootscreen", true), 20, y,
-                        "The eDEX startup log, with this machine's own figures");
+                        "The eDEX startup log, with this machine's own figures", "bootscreen");
         snapBox = Check("Keep the shell in its frame", On("snapshell", true), 300, y,
-                        "Put the shell window back if something moves or resizes it");
+                        "Put the shell window back if something moves or resizes it", "snapshell");
         y += 24;
         altTabBox = Check("Shell in Alt-Tab", On("shellalttab", false), 20, y,
-                          "Off keeps the shell out of the window switcher, as part of the HUD");
+                          "Off keeps the shell out of the window switcher, as part of the HUD", "shellalttab");
         autostartBox = Check("Start when I log in", On("autostart", false), 300, y,
-                             "A shortcut in your Startup folder");
+                             "A shortcut in your Startup folder", "autostart");
         y += 26;
         Note("Win+Alt+H hide HUD, T shell, E on/off, S settings.", 20, y);
         y += 26;
@@ -380,43 +392,51 @@ class SettingsForm : Form
     {
         var args = new StringBuilder();
 
-        if (accentHex != Get("accent")) args.Append(" -Accent " + accentHex);
-        if (bgHex != Get("background")) args.Append(" -Background " + bgHex);
-        if (iconHex != Get("icon")) args.Append(" -IconColor " + iconHex);
-        if (gridBox.Checked != On("grid", false)) args.Append(Switch("Grid", gridBox.Checked));
+        // Only what was changed here, and only when it still differs from what
+        // is on disk now. Anything this window never touched is left alone,
+        // however stale its own copy of it has become.
+        Func<string, bool> changed = field => touched.Contains(field);
+
+        if (changed("accent") && accentHex != Get("accent")) args.Append(" -Accent " + accentHex);
+        if (changed("background") && bgHex != Get("background")) args.Append(" -Background " + bgHex);
+        if (changed("icon") && iconHex != Get("icon")) args.Append(" -IconColor " + iconHex);
+        if (changed("grid") && gridBox.Checked != On("grid", false)) args.Append(Switch("Grid", gridBox.Checked));
 
         var wanted = new List<string>();
         foreach (var kv in extraBoxes) if (kv.Value.Checked) wanted.Add(kv.Key);
         wanted.Sort();
         var was = List("panels"); was.Sort();
-        if (string.Join(",", wanted.ToArray()) != string.Join(",", was.ToArray()))
+        if (changed("panels") && string.Join(",", wanted.ToArray()) != string.Join(",", was.ToArray()))
             args.Append(" -Panels " + (wanted.Count > 0 ? string.Join(",", wanted.ToArray()) : "none"));
 
         var offNow = new List<string>();
         foreach (var kv in standardBoxes) if (!kv.Value.Checked) offNow.Add(kv.Key);
         offNow.Sort();
         var offWas = List("off"); offWas.Sort();
-        if (string.Join(",", offNow.ToArray()) != string.Join(",", offWas.ToArray()))
+        if (changed("off") && string.Join(",", offNow.ToArray()) != string.Join(",", offWas.ToArray()))
             args.Append(" -Off " + (offNow.Count > 0 ? string.Join(",", offNow.ToArray()) : "none"));
 
-        if (folderBox.Text.Trim() != Get("folderraw"))
+        if (changed("folder") && folderBox.Text.Trim() != Get("folderraw"))
             args.Append(" -Folder \"" + folderBox.Text.Trim() + "\"");
 
-        if (keyClickBox.Checked != On("keyclick", false)) args.Append(Switch("KeyClick", keyClickBox.Checked));
-        if (hotkeysBox.Checked != On("hotkeys", true)) args.Append(Switch("Hotkeys", hotkeysBox.Checked));
-        if (bootBox.Checked != On("bootscreen", true)) args.Append(Switch("BootScreen", bootBox.Checked));
-        if (snapBox.Checked != On("snapshell", true)) args.Append(Switch("SnapShell", snapBox.Checked));
-        if (altTabBox.Checked != On("shellalttab", false)) args.Append(Switch("ShellAltTab", altTabBox.Checked));
-        if (autostartBox.Checked != On("autostart", false)) args.Append(Switch("Autostart", autostartBox.Checked));
+        if (changed("keyclick") && keyClickBox.Checked != On("keyclick", false)) args.Append(Switch("KeyClick", keyClickBox.Checked));
+        if (changed("hotkeys") && hotkeysBox.Checked != On("hotkeys", true)) args.Append(Switch("Hotkeys", hotkeysBox.Checked));
+        if (changed("bootscreen") && bootBox.Checked != On("bootscreen", true)) args.Append(Switch("BootScreen", bootBox.Checked));
+        if (changed("snapshell") && snapBox.Checked != On("snapshell", true)) args.Append(Switch("SnapShell", snapBox.Checked));
+        if (changed("shellalttab") && altTabBox.Checked != On("shellalttab", false)) args.Append(Switch("ShellAltTab", altTabBox.Checked));
+        if (changed("autostart") && autostartBox.Checked != On("autostart", false)) args.Append(Switch("Autostart", autostartBox.Checked));
 
         if (args.Length == 0)
         {
-            outputBox.Text = "nothing changed";
+            outputBox.Text = touched.Count == 0
+                ? "nothing changed"
+                : "nothing to do - those values are already set";
             return;
         }
 
         SetBusy(true);
         outputBox.Text = "applying" + args + Environment.NewLine;
+        touched.Clear();
         string argLine = args.ToString();
         var worker = new Thread(() =>
         {
