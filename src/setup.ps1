@@ -17,6 +17,12 @@
     Your previous settings are backed up first; src\uninstall.ps1 reverts.
     Windows may ask for permission (UAC) while the helper apps install.
 #>
+param(
+    # No 'press Enter' pauses: for the installer's silent mode, for winget,
+    # and for anything driving setup from a scheduled task.
+    [switch]$Unattended
+)
+
 $ErrorActionPreference = 'Stop'
 $Root  = Split-Path -Parent $PSScriptRoot
 $tools = Join-Path $PSScriptRoot 'tools'
@@ -25,7 +31,10 @@ $version = (Get-Content (Join-Path $Root 'VERSION') -ErrorAction SilentlyContinu
 function Step($n, $msg) { Write-Host "`n[$n/7] $msg" -ForegroundColor Cyan }
 function Ok($msg)       { Write-Host "      $msg" -ForegroundColor DarkCyan }
 function Warn($msg)     { Write-Host "      $msg" -ForegroundColor Yellow }
-function Fail($msg)     { Write-Host "`n  $msg`n" -ForegroundColor Red; Read-Host 'Press Enter to close' | Out-Null; exit 1 }
+function Pause-IfInteractive {
+    if (-not $Unattended) { Read-Host 'Press Enter to close' | Out-Null }
+}
+function Fail($msg)     { Write-Host "`n  $msg`n" -ForegroundColor Red; Pause-IfInteractive; exit 1 }
 
 Write-Host ''
 Write-Host "  eDEX-Tron $version  ::  setup" -ForegroundColor Cyan
@@ -129,4 +138,4 @@ Write-Host '  - Toggle the theme with "eDEX-Tron Theme" (Desktop / Start menu) o
 Write-Host '  - Change colours:  src\retheme.ps1 -Accent "#ff9f1c"'
 Write-Host '  - Undo everything: src\uninstall.ps1'
 Write-Host ''
-Read-Host 'Press Enter to close' | Out-Null
+Pause-IfInteractive
