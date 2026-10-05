@@ -30,8 +30,23 @@ static class EdexTronSetup
     static readonly string[] Keep = { "dock.txt", "theme.json" };
 
     [STAThread]
-    static int Main()
+    static int Main(string[] argv)
     {
+        // Silent install, for winget and for anyone scripting a rollout: no
+        // prompt, no console, and -- unlike the interactive path -- it waits
+        // for setup to finish and reports what happened in its exit code,
+        // because a package manager judges the install by that.
+        bool silent = false;
+        foreach (string a in argv)
+        {
+            switch (a.TrimStart('-', '/').ToLowerInvariant())
+            {
+                case "s": case "silent": case "quiet": case "verysilent":
+                    silent = true;
+                    break;
+            }
+        }
+
         string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         string target = Path.GetFullPath(Path.Combine(docs, "eDEX-Tron"));
         bool upgrading = Directory.Exists(target);
@@ -44,7 +59,8 @@ static class EdexTronSetup
             "change your wallpaper, accent colour and app themes (backed up first),\n" +
             "and restart Explorer once. Undo any time with src\\uninstall.ps1.\n\n" +
             "Continue?";
-        if (MessageBox.Show(prompt, "eDEX-Tron Setup", MessageBoxButtons.OKCancel,
+        if (!silent &&
+            MessageBox.Show(prompt, "eDEX-Tron Setup", MessageBoxButtons.OKCancel,
                             MessageBoxIcon.Information) != DialogResult.OK)
             return 1;
 
@@ -54,19 +70,26 @@ static class EdexTronSetup
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Could not unpack the files:\n\n" + ex.Message +
-                "\n\nIf the theme is running, switch it off first and try again.",
-                "eDEX-Tron Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (!silent)
+                MessageBox.Show("Could not unpack the files:\n\n" + ex.Message +
+                    "\n\nIf the theme is running, switch it off first and try again.",
+                    "eDEX-Tron Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            else
+                Console.Error.WriteLine("Could not unpack the files: " + ex.Message);
             return 2;
         }
 
         string script = Path.Combine(target, "src", "setup.ps1");
         var psi = new ProcessStartInfo("powershell.exe",
-            "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"");
+            "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\""
+            + (silent ? " -Unattended" : ""));
         psi.UseShellExecute = true;
         psi.WorkingDirectory = target;
-        Process.Start(psi);
-        return 0;
+        if (silent) psi.WindowStyle = ProcessWindowStyle.Hidden;
+        var setup = Process.Start(psi);
+        if (!silent) return 0;          // the window it opened carries on alone
+        setup.WaitForExit();
+        return setup.ExitCode;
     }
 
     static void Extract(string target)
