@@ -89,7 +89,12 @@ function Ensure-Winget($id, $label, $check) {
     # would not install -- no network, a source not yet accepted, a package
     # pulled -- all anyone got was "did not install", and then a hard failure
     # several lines later with nothing to go on.
-    $out = winget install --id $id --exact --silent `
+    # --source winget, always. Every package here lives in the community
+    # repository, and naming it avoids the failure a clean machine hits: if the
+    # msstore source is unavailable, unconsented or blocked by policy, winget
+    # reports "Rest API internal error", then finds the package in more than
+    # one working source and refuses to install anything without --source.
+    $out = winget install --id $id --exact --silent --source winget `
                --accept-package-agreements --accept-source-agreements 2>&1
     $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'

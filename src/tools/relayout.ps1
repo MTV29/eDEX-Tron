@@ -125,7 +125,7 @@ $cpuName = if ($cpu.Name -match '(i[3579]-\w+|Ryzen \d+ \w+|Core Ultra \d \w+)')
 Invoke-Py (Join-Path $tools 'gen_skins.py') --out $srcSkins `
     --cores $cpu.NumberOfLogicalProcessors --cpu-name $cpuName `
     --width 250 --term-width $plan.term_w --term-height $plan.term_h `
-    --desktop $desktop --folder $folder --graph-height $plan.graph_h `
+    --desktop $desktop --folder $folder `
     --drives ($drives -join ',') --gpu-name $gpuName | Out-Null
 
 & (Join-Path $tools 'gen_dock.ps1') -Config $dockCfg -SkinRoot $srcSkins -Cols $plan.dock_cols | Out-Null

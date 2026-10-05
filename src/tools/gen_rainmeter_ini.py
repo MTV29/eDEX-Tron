@@ -40,17 +40,16 @@ H = {
     'NetStat': 191,
     'RamWatcher': 152,
     'TopList': 135,
+    'ConnInfo': 76,
     'Ports': 121,
     'Gpu': 74,
     # Disk grows with the drive count; see DISK_BASE / DISK_ROW.
 }
-CONNINFO_FIXED = 72          # ConnInfo height = 72 + 2 * graph height
 GRID_CELL = 66               # gen_dock: icon 40 + gap 26
 GRID_ROW = 68                # gen_dock: icon 40 + label 28
 GRID_BASE = 111              # gen_dock: height of a one-row grid
 TERM_FRAME_TOP = 25          # Terminal skin: caption + rule above the frame
 TERM_CHROME = 29             # Terminal skin height = frame height + this
-GRAPH_MIN, GRAPH_MAX = 30, 95
 MIN_TERM_H = 120 + TERM_CHROME   # the shell never gets squeezed below this
 
 # Optional panels, in the order they claim space: the last one listed is the
@@ -103,11 +102,9 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
     heights['Disk'] = DISK_BASE + DISK_ROW * max(1, drives)
     off = set(off)
 
-    def stack_h(names, gh):
-        """Height of a column of panels, with the traffic graph at `gh`."""
-        tot = sum((CONNINFO_FIXED + 2 * gh) if n == 'ConnInfo' else heights[n]
-                  for n in names)
-        return tot + GAP * max(0, len(names) - 1)
+    def stack_h(names):
+        """Height of a column of panels, including the gaps between them."""
+        return sum(heights[n] for n in names) + GAP * max(0, len(names) - 1)
 
     # --- dock, at the bottom. It wraps to more rows as it gets longer, but a
     # tall dock would climb into the shell, so it is widened first: a wide
@@ -146,7 +143,7 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
     # than the band, so the column has to clear whichever starts higher.
     left_cap = min(band_top, dock_y) - GAP - TOP
     left_req = [n for n in LEFT_STACK if n not in off]
-    while left_req and stack_h(left_req, 0) > left_cap:
+    while left_req and stack_h(left_req) > left_cap:
         no_room.append(left_req.pop())
     y = TOP
     for name in left_req:
@@ -155,15 +152,15 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
     left_bottom = max(TOP, y - GAP)
 
     # --- right column. Nothing sits below or beside it, so it has the full
-    # height; the traffic graph absorbs whatever the panels leave over.
+    # height; everything in it is a fixed size now.
     avail = work_h - TOP - BOTTOM_PAD
     right_req = [n for n in RIGHT_STACK if n not in off]
-    while right_req and stack_h(right_req, GRAPH_MIN) > avail:
+    while right_req and stack_h(right_req) > avail:
         no_room.append(right_req.pop())
 
     # --- fit the optional panels into whatever the two columns have spare
-    left_room = left_cap - stack_h(left_req, 0) - (GAP if left_req else 0)
-    right_room = avail - stack_h(right_req, GRAPH_MIN) - (GAP if right_req else 0)
+    left_room = left_cap - stack_h(left_req) - (GAP if left_req else 0)
+    right_room = avail - stack_h(right_req) - (GAP if right_req else 0)
 
     col = {'left': [], 'right': []}
     for name in [n for n in OPTIONAL if n in panels and n not in off]:
@@ -181,20 +178,15 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
         else:
             no_room.append(name)
 
-    graph_h = clamp((avail - stack_h(right_req + col['right'], 0)) // 2,
-                    GRAPH_MIN, GRAPH_MAX)
-    # Belt and braces: if even the minimum graph overflows, give up the
-    # lowest-priority extra rather than letting the column run off screen.
-    while col['right'] and stack_h(right_req + col['right'], graph_h) > avail:
+    # Belt and braces: give up the lowest-priority extra rather than letting
+    # the column run off the bottom of the screen.
+    while col['right'] and stack_h(right_req + col['right']) > avail:
         no_room.append(col['right'].pop())
-        graph_h = clamp((avail - stack_h(right_req + col['right'], 0)) // 2,
-                        GRAPH_MIN, GRAPH_MAX)
 
     y = TOP
     for name in right_req + col['right']:
         pos[name] = (right_x, y)
-        y += ((CONNINFO_FIXED + 2 * graph_h) if name == 'ConnInfo'
-              else heights[name]) + GAP
+        y += heights[name] + GAP
 
     y = left_bottom + GAP
     for name in col['left']:
@@ -225,7 +217,6 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
         'term_w': term_w, 'term_h': term_h,
         'term_rect': [band_l + 1, TOP + TERM_FRAME_TOP + 1, term_w - 2, term_h - 2],
         'folder_cols': folder_cols, 'folder_rows': folder_rows,
-        'graph_h': graph_h,
         'dock_cols': dock_cols, 'dock_rows': dock_rows,
         'desk_cols': desk_cols, 'desk_rows': desk_rows,
         # Everything switched off: the ones you did not ask for, the ones you
@@ -314,7 +305,7 @@ if __name__ == '__main__':
                 f.write(','.join(str(v) for v in p['term_rect']))
 
     print(f"plan {a.screen_w}x{a.work_h}: terminal {p['term_w']}x{p['term_h']}, "
-          f"folder {p['folder_cols']}x{p['folder_rows']}, graph {p['graph_h']}, "
+          f"folder {p['folder_cols']}x{p['folder_rows']}, "
           f"dock {p['dock_cols']}x{p['dock_rows']}, desktop {p['desk_cols']}x{p['desk_rows']}"
           f"{'  extras: ' + ', '.join(p['shown']) if p['shown'] else ''}"
           f"{'  NO ROOM: ' + ', '.join(p['no_room']) if p['no_room'] else ''}")

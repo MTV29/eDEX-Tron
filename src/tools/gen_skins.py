@@ -727,16 +727,17 @@ def netstat():
 
 
 # ---------------------------------------------------------------- CONNINFO ---
-def conninfo(gh=95):
-    """eDEX mod_conninfo: mirrored up/down histograms sharing a centre rule.
+def conninfo():
+    """Network usage: what is coming down and what is going up, and nothing else.
 
-    This occupies the slot eDEX gives its globe -- a spinning WebGL sphere has
-    no Rainmeter equivalent and showed nothing real, so the space goes to the
-    traffic graph instead, which is what the panel is actually for.
+    This replaced a pair of mirrored scrolling histograms. They looked the part
+    and took 200 pixels of a column that three other panels were queuing for,
+    to say less than two numbers and two bars say. The slot eDEX gives its
+    spinning globe is not worth that much here.
     """
-    gw = W - PAD * 2
-    return '\n\n'.join([skin_header(), header('Network Usage', 'conninfo'),
-                        textwrap.dedent(f"""
+    bar_x = PAD + 46
+    bar_w = W - PAD * 2 - 46 - 76
+    out = [skin_header(), header('Network Usage', 'conninfo'), textwrap.dedent("""
     [MeasureDown]
     Measure=NetIn
     Interface=Best
@@ -746,97 +747,51 @@ def conninfo(gh=95):
     Measure=NetOut
     Interface=Best
     MaxValue=#NetMax#
+    """).strip()]
 
-    [MeasureDownText]
-    Measure=NetIn
-    Interface=Best
+    for i, (label, measure) in enumerate((('Down', 'MeasureDown'), ('Up', 'MeasureUp'))):
+        out.append(textwrap.dedent(f"""
+        [Meter{label}Label]
+        Meter=String
+        X={PAD}
+        Y={'10R' if i == 0 else '12R'}
+        FontFace=#FontLight#
+        FontSize={FS_LABEL}
+        FontColor=#Accent#,{A_LABEL}
+        StringCase=Upper
+        AntiAlias=1
+        Text={label}
 
-    [MeasureUpText]
-    Measure=NetOut
-    Interface=Best
+        [Meter{label}BarBg]
+        Meter=Shape
+        X={bar_x}
+        Y=5r
+        Shape=Rectangle 0,0,{bar_w},3 | Fill Color #Accent#,90 | StrokeWidth 0
 
-    [MeterTrafficLabel]
-    Meter=String
-    X={PAD}
-    Y=10R
-    FontFace=#FontLight#
-    FontSize={FS_LABEL}
-    FontColor=#Accent#,{A_LABEL}
-    StringCase=Upper
-    AntiAlias=1
-    Text=Up / Down
+        [Meter{label}Bar]
+        Meter=Bar
+        MeasureName={measure}
+        X={bar_x}
+        Y=0r
+        W={bar_w}
+        H=3
+        BarColor=#Accent#,255
 
-    [MeterGraphTop]
-    Meter=Shape
-    X={PAD}
-    Y=6R
-    Shape=Line 0,0,{gw},0 | StrokeWidth 1 | Stroke Color #Accent#,70 | StrokeDashes 3,3
-
-    [MeterDownGraph]
-    Meter=Line
-    LineCount=1
-    LineColor=#Accent#,220
-    AutoScale=1
-    SolidColor=#Accent#,10
-    MeasureName=MeasureDown
-    X={PAD}
-    Y=2R
-    W={gw}
-    H={gh}
-    GraphStart=Right
-
-    [MeterMidRule]
-    Meter=Shape
-    X={PAD}
-    Y=0R
-    Shape=Line 0,0,{gw},0 | StrokeWidth 1 | Stroke Color #Accent#,120
-
-    [MeterUpGraph]
-    Meter=Line
-    LineCount=1
-    LineColor=#Accent#,220
-    AutoScale=1
-    SolidColor=#Accent#,10
-    MeasureName=MeasureUp
-    X={PAD}
-    Y=1R
-    W={gw}
-    H={gh}
-    GraphStart=Right
-    Flip=1
-
-    [MeterGraphBottom]
-    Meter=Shape
-    X={PAD}
-    Y=0R
-    Shape=Line 0,0,{gw},0 | StrokeWidth 1 | Stroke Color #Accent#,70 | StrokeDashes 3,3
-
-    [MeterDownLabel]
-    Meter=String
-    MeasureName=MeasureDownText
-    X={PAD}
-    Y=6R
-    FontFace=#FontLight#
-    FontSize={FS_LABEL}
-    FontColor=#Accent#,{A_VAL}
-    AntiAlias=1
-    AutoScale=1
-    Text=DOWN %1/s
-
-    [MeterUpLabel]
-    Meter=String
-    MeasureName=MeasureUpText
-    X={W - PAD}
-    Y=0r
-    FontFace=#FontLight#
-    FontSize={FS_LABEL}
-    FontColor=#Accent#,{A_VAL}
-    StringAlign=Right
-    AntiAlias=1
-    AutoScale=1
-    Text=UP %1/s
-    """).strip()])
-
+        [Meter{label}Rate]
+        Meter=String
+        MeasureName={measure}
+        X={W - PAD}
+        Y=-6r
+        FontFace=#FontMain#
+        FontSize={FS_LABEL}
+        FontColor=#Accent#,{A_VAL}
+        StringAlign=Right
+        AutoScale=1
+        NumOfDecimals=1
+        AntiAlias=1
+        Text=%1B/s
+        """).strip())
+    return '\n\n'.join(out)
 
 # ---------------------------------------------------------------- TERMINAL ---
 def terminal(tw, th):
@@ -932,8 +887,6 @@ def main():
     p.add_argument('--width', type=int, default=250)
     p.add_argument('--term-width', type=int, default=700)
     p.add_argument('--term-height', type=int, default=430)
-    p.add_argument('--graph-height', type=int, default=95,
-                   help='height of each half of the network usage graph')
     p.add_argument('--desktop', default=os.path.join(
         os.environ.get('USERPROFILE', 'C:\\'), 'Desktop'))
     p.add_argument('--folder', default=os.path.join(
@@ -971,7 +924,7 @@ def main():
         'TopList': toplist(),
         'NetStat': netstat(),
         # The Network Usage graph takes the slot eDEX gives its globe.
-        'ConnInfo': conninfo(a.graph_height),
+        'ConnInfo': conninfo(),
         # Optional extras. They are always generated; whether each one is
         # switched on is decided by theme.json "panels" and by whether the
         # layout planner found room for it (gen_rainmeter_ini.py).
