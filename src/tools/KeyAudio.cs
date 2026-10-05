@@ -48,6 +48,7 @@ static class KeyAudio
 
     const int WAVE_MAPPER = -1;
     const uint WHDR_DONE = 0x00000001;
+    const uint WHDR_INQUEUE = 0x00000010;
     const int VARIANTS = 6;        // how many versions of the sample to keep
     const int VOICES = 3;          // how many may be sounding at once
 
@@ -57,6 +58,7 @@ static class KeyAudio
     static readonly Random rnd = new Random();
     static int hdrSize;
     static int lastVariant = -1;
+    static int writeErrors;
 
     public static bool Ready { get { return device != IntPtr.Zero; } }
 
@@ -140,9 +142,16 @@ static class KeyAudio
                 // dwFlags sits after lpData, dwBufferLength, dwBytesRecorded
                 // and dwUser. A header still queued cannot be rewritten.
                 uint flags = (uint)Marshal.ReadInt32(hp, IntPtr.Size + 4 + 4 + IntPtr.Size);
-                if (flags != 0 && (flags & WHDR_DONE) == 0) continue;   // still sounding
+                // Busy means queued. Testing for anything else catches
+                // WHDR_PREPARED, which every header carries from the moment it
+                // is prepared and never loses -- which marks all of them busy
+                // forever, so nothing is ever played and nothing reports an
+                // error either.
+                if ((flags & WHDR_INQUEUE) != 0) continue;
                 lastVariant = v;
-                waveOutWrite(device, hp, hdrSize);
+                int rc = waveOutWrite(device, hp, hdrSize);
+                if (rc != 0 && writeErrors++ < 3)
+                    EdexTron.Log("key click: waveOutWrite failed (" + rc + ")");
                 return;
             }
         }
