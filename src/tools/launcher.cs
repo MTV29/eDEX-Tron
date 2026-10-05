@@ -943,6 +943,26 @@ static class EdexTron
             case "relayout":
                 Relayout(true);
                 break;
+            case "dumpclicks":
+            {
+                // Write the key-click variants out so they can be heard on
+                // their own, which is the only way to tell a time stretch that
+                // worked from one that quietly wrecked the sound.
+                string where = argv.Length > 1
+                    ? argv[1]
+                    : Path.Combine(ProjectRoot, "runtime", "clicks");
+                string why;
+                if (!KeyAudio.Start(KeySound, out why))
+                {
+                    MessageBox.Show("Could not prepare the clicks: " + why, "eDEX-Tron");
+                    return 1;
+                }
+                int n = KeyAudio.Dump(where);
+                KeyAudio.Stop();
+                MessageBox.Show(n + " variants written to:" + Environment.NewLine + where,
+                                "eDEX-Tron");
+                break;
+            }
             default:
                 MessageBox.Show(
                     "Usage: eDEX-Tron.exe "

@@ -59,6 +59,9 @@ static class KeyAudio
     static int hdrSize;
     static int lastVariant = -1;
     static int writeErrors;
+    // Kept so the variants can be written out and listened to; see Dump.
+    static readonly List<short[]> shapedVariants = new List<short[]>();
+    static int shapedRate = 44100;
 
     public static bool Ready { get { return device != IntPtr.Zero; } }
 
@@ -90,9 +93,9 @@ static class KeyAudio
 
             // Stretch whatever sample this is to the length a keystroke should
             // sound, then spread the variants around that -- rather than
-            // around however long the source happened to be. Resampling moves
-            // the pitch with it, which is the point: a longer click is also a
-            // slightly deeper one, as it would be on a bigger key.
+            // around however long the source happened to be. The stretch keeps
+            // the pitch where it was, so the six variants are the same keyboard
+            // rather than six different ones.
             double targetMs = EdexTron.Number("keyclickms", 43.0);
             double sourceMs = pcm.Length / (double)channels / rate * 1000.0;
             double baseSpeed = targetMs > 1.0 ? sourceMs / targetMs : 1.0;
@@ -102,8 +105,12 @@ static class KeyAudio
                 // Either side of that: a little slower and quieter through a
                 // little faster and louder.
                 double spread = VARIANTS == 1 ? 0.0 : (v / (double)(VARIANTS - 1)) * 2.0 - 1.0;
-                short[] shaped = Reshape(pcm, baseSpeed * (1.0 + spread * 0.05),
-                                         1.0 - Math.Abs(spread) * 0.18);
+                int targetLen = (int)(pcm.Length / channels / baseSpeed
+                                      * (1.0 + spread * 0.05));
+                short[] shaped = Reshape(pcm, targetLen,
+                                         1.0 - Math.Abs(spread) * 0.18, rate);
+                shapedVariants.Add(shaped);
+                shapedRate = rate;
                 byte[] raw = new byte[shaped.Length * 2];
                 Buffer.BlockCopy(shaped, 0, raw, 0, raw.Length);
 
@@ -170,6 +177,33 @@ static class KeyAudio
         // than about two hundred keys a second. Drop it rather than cut one off.
     }
 
+    /// <summary>Write the variants out as wavs, so they can be listened to
+    /// rather than taken on trust. eDEX-Tron.exe dumpclicks &lt;folder&gt;.</summary>
+    public static int Dump(string folder)
+    {
+        Directory.CreateDirectory(folder);
+        for (int i = 0; i < shapedVariants.Count; i++)
+        {
+            short[] v = shapedVariants[i];
+            string path = Path.Combine(folder, "variant" + (i + 1) + ".wav");
+            using (var f = new FileStream(path, FileMode.Create))
+            using (var w = new BinaryWriter(f))
+            {
+                int dataLen = v.Length * 2;
+                w.Write(new char[] { 'R', 'I', 'F', 'F' });
+                w.Write(36 + dataLen);
+                w.Write(new char[] { 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ' });
+                w.Write(16); w.Write((short)1); w.Write((short)1);
+                w.Write(shapedRate); w.Write(shapedRate * 2);
+                w.Write((short)2); w.Write((short)16);
+                w.Write(new char[] { 'd', 'a', 't', 'a' });
+                w.Write(dataLen);
+                foreach (short sample in v) w.Write(sample);
+            }
+        }
+        return shapedVariants.Count;
+    }
+
     public static void Stop()
     {
         if (device != IntPtr.Zero)
@@ -183,30 +217,107 @@ static class KeyAudio
         foreach (IntPtr b in blocks) Marshal.FreeHGlobal(b);
         headers.Clear();
         blocks.Clear();
+        shapedVariants.Clear();
     }
 
     // --- sample handling -----------------------------------------------------
 
-    /// <summary>Resample by `speed` and scale by `gain`, with a soft edge.</summary>
-    static short[] Reshape(short[] src, double speed, double gain)
+    /// <summary>Make the sample `targetLen` samples long without moving its pitch,
+    /// then scale it by `gain`.</summary>
+    static short[] Reshape(short[] src, int targetLen, double gain, int rate)
     {
-        int n = Math.Max(1, (int)(src.Length / speed));
+        short[] body = TimeStretch(src, targetLen, rate);
+        int n = body.Length;
         var outp = new short[n];
         for (int i = 0; i < n; i++)
-        {
-            double at = i * speed;
-            int a = (int)at;
-            double frac = at - a;
-            double s = a + 1 < src.Length ? src[a] * (1 - frac) + src[a + 1] * frac
-                                          : (a < src.Length ? src[a] : 0);
-            outp[i] = (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, s * gain));
-        }
+            outp[i] = (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, body[i] * gain));
+
         // Half a millisecond in and three out: a buffer that starts or stops on
         // a non-zero sample adds a click of its own, on top of the one wanted.
         int fadeIn = Math.Min(n, 22), fadeOut = Math.Min(n, 132);
         for (int i = 0; i < fadeIn; i++) outp[i] = (short)(outp[i] * i / (double)fadeIn);
         for (int i = 0; i < fadeOut; i++)
             outp[n - 1 - i] = (short)(outp[n - 1 - i] * i / (double)fadeOut);
+        return outp;
+    }
+
+    /// <summary>Change the length, keeping the pitch.
+    ///
+    /// Resampling would be one line, but it moves the pitch with the length --
+    /// a longer click becomes a deeper one, and six variants become six
+    /// different keyboards. This is overlap-add instead: cut the sound into
+    /// short overlapping grains and lay them down at a different spacing than
+    /// they were taken from. Each grain keeps its own waveform, so the pitch
+    /// does not move; only how often they recur changes.
+    ///
+    /// Two details earn their keep. The attack is copied through untouched --
+    /// stretching the first few milliseconds of a percussive sound smears the
+    /// very thing that makes it read as a click. And each grain is positioned
+    /// by searching a small window for the offset that best matches what has
+    /// already been written, which is what keeps overlap-add from phasing
+    /// (this is WSOLA; without the search it sounds hollow and flanged).
+    /// </summary>
+    static short[] TimeStretch(short[] src, int targetLen, int rate)
+    {
+        if (targetLen <= 0) return src;
+        if (Math.Abs(targetLen - src.Length) <= 2) return (short[])src.Clone();
+
+        int attack = Math.Min(src.Length / 2, (int)(rate * 0.008));   // 8ms, kept intact
+        int srcTail = src.Length - attack;
+        int dstTail = targetLen - attack;
+        if (srcTail < 64 || dstTail < 64)
+        {
+            // Too short to granulate sensibly; pad or cut the tail instead.
+            var plain = new short[targetLen];
+            for (int i = 0; i < targetLen; i++) plain[i] = i < src.Length ? src[i] : (short)0;
+            return plain;
+        }
+
+        double ratio = dstTail / (double)srcTail;
+        int grain = Math.Max(64, Math.Min(srcTail / 3, (int)(rate * 0.006)));  // ~6ms
+        int synHop = grain / 2;                                   // 50% overlap
+        int anaHop = Math.Max(1, (int)Math.Round(synHop / ratio));
+        int search = Math.Max(8, grain / 8);
+
+        var window = new double[grain];
+        for (int i = 0; i < grain; i++)
+            window[i] = 0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / (grain - 1));
+
+        var acc = new double[targetLen + grain];
+        for (int i = 0; i < attack; i++) acc[i] = src[i];
+
+        int outPos = attack, inPos = attack;
+        bool first = true;
+        while (outPos + grain < targetLen + grain && inPos < src.Length)
+        {
+            int best = inPos;
+            if (!first)
+            {
+                // Where does this grain line up best with what is already down?
+                double bestScore = double.NegativeInfinity;
+                for (int d = -search; d <= search; d++)
+                {
+                    int p = inPos + d;
+                    if (p < attack || p + synHop >= src.Length) continue;
+                    double score = 0;
+                    for (int k = 0; k < synHop; k += 2) score += acc[outPos + k] * src[p + k];
+                    if (score > bestScore) { bestScore = score; best = p; }
+                }
+            }
+            for (int k = 0; k < grain; k++)
+            {
+                int sp = best + k;
+                if (sp >= src.Length) break;
+                acc[outPos + k] += src[sp] * window[k];
+            }
+            inPos = best + anaHop;
+            outPos += synHop;
+            first = false;
+        }
+
+        var outp = new short[targetLen];
+        for (int i = 0; i < targetLen; i++)
+            outp[i] = (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, acc[i]));
         return outp;
     }
 
