@@ -149,9 +149,30 @@ a boot animation from a game is no more ours to redistribute than eDEX-UI's own
 typeface, so `assets\sounds\` is left out of the repository.
 
 **Key clicks** — an optional click on every keystroke, off by default. The
-click is one we render ourselves (`src\tools\gen_sounds.py`), because eDEX-UI's
-own sound set cannot be redistributed. The hook asks only *whether* a key went
-down; it never looks at which one.
+audio device is opened once and kept open, and each press is layered over
+whatever is still sounding rather than cutting it off, using six variants of the
+sample at slightly different pitch and level — so typing sounds like typing
+rather than one sample on repeat. Holding a key is one click, not thirty a
+second. `keyclickms` in `theme.json` sets how long a click lasts (43ms by
+default); the variants spread five per cent either side of it.
+
+The click that ships is one we render ourselves (`src\tools\gen_sounds.py`),
+because eDEX-UI's own sound set cannot be redistributed. To use your own — a
+recording of your keyboard, or one of eDEX-UI's effects if you have it installed
+— put it at `assets\sounds\key.wav`, which the launcher prefers:
+
+```bash
+python src\tools\sample_click.py <a recording of typing> --report
+```
+
+That finds the individual presses, takes the clearest, trims and levels it, and
+warns when the clip it produced holds more than one press — which plays as that
+many clicks per key, and is not obvious until you type. `--whole` skips the
+search, for a file that is already a single sound.
+
+To tell a new press from Windows repeating a key you are holding, the hook reads
+which key was pressed. It is used as an index into an is-this-key-down table and
+nothing else: no key is recorded, counted or passed on.
 
 **Colours** — all colours live in `theme.json`. Settings has a colour
 picker; from a terminal:
