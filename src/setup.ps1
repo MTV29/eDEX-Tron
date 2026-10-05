@@ -49,6 +49,15 @@ if ((Resolve-Path $Root).Path.TrimEnd('\') -ne $expected.TrimEnd('\')) {
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Fail 'winget (App Installer) is required. Install "App Installer" from the Microsoft Store, then run this again.'
 }
+# A fresh Windows 11 with OneDrive backup switched on puts Documents inside
+# OneDrive. Everything still works -- the HUD is told where its skins are, so
+# the paths stay consistent -- but the whole theme, wallpapers included, gets
+# synced and counts against the person's storage. Worth saying out loud.
+if ($expected -like '*\OneDrive\*') {
+    Warn 'Your Documents folder is inside OneDrive, so the theme will be synced.'
+    Warn 'To keep it local, turn off OneDrive backup for Documents, then move'
+    Warn "the folder to $env:USERPROFILE\Documents\eDEX-Tron and run this again."
+}
 
 function Refresh-Path {
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +

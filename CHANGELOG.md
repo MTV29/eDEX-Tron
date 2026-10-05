@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.9.1 — 2026-10-05 (Windows)
+
+### Added
+
+- **The layout rebuilds itself when the screen changes.** Change the resolution
+  or the scaling, plug in a monitor, or move the taskbar, and the HUD is
+  re-planned a few seconds later instead of waiting to be told.
+- **`eDEX-Tron.exe repair`** — rebuild the layout for this screen, restart
+  anything that has died, put the shell back in its frame, hide the desktop
+  icons again, then report. Also `relayout` to force a rebuild on its own.
+- **The background tasks keep a log** at `runtime\watcher.log`: what they
+  noticed, what they rebuilt, and anything they could not do.
+- **Silent install.** `eDEX-Tron-Setup.exe /S` (or `/silent`, `/quiet`,
+  `/VERYSILENT`) installs without a prompt, waits for setup to finish and
+  returns its exit code, so winget and scripted rollouts can use it.
+  `setup.ps1 -Unattended` does the same from source.
+- **`src\dev\verify_uninstall.ps1`** — snapshots the 50 registry values, files,
+  fonts and shortcuts the theme touches, so the claim that uninstalling puts
+  everything back can be checked rather than believed.
+
+### Fixed
+
+- `CurrentTheme` was captured in the backup and never restored, so anyone who
+  had applied the generated `.theme` file was left with Personalization
+  pointing at a file the uninstall had just deleted.
+- Setup now says so when Documents is inside OneDrive, since the whole theme
+  would be synced.
+
+### Verified
+
+An install, uninstall, reinstall and uninstall cycle on a real machine leaves
+all 50 tracked values exactly as they were — the Windows counterpart of the
+empty dconf diff the Linux edition was held to.
+
 ## 0.9.0-linux — 2026-10-05 (Linux)
 
 ### Fixed

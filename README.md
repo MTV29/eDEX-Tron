@@ -61,8 +61,8 @@ Python packages.
 
 ## Install
 
-1. Download **`eDEX-Tron-Setup-v0.9.0.exe`** from the
-   [v0.9.0 release](../../releases/tag/v0.9.0).
+1. Download **`eDEX-Tron-Setup-v0.9.1.exe`** from the
+   [v0.9.1 release](../../releases/tag/v0.9.1).
 2. Run it. Windows SmartScreen may warn that the app is unrecognised, because
    the installer isn't code-signed: choose **More info → Run anyway**.
 3. Confirm the install location (`Documents\eDEX-Tron`). A PowerShell window
