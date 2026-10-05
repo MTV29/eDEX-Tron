@@ -6,7 +6,7 @@ eDEX-UI's look to your whole desktop while you keep using Windows normally:
 live system panels, a built-in shell, a shortcut dock, and a matching colour
 scheme across Windows, the taskbar, Windows Terminal, VS Code and Office.
 
-> **Version 0.8 — pre-release.** It works day to day, but it is still changing.
+> **Version 0.9 — pre-release.** It works day to day, but it is still changing.
 > Everything it changes is backed up and can be undone.
 
 > **On Linux?** There is a separate Linux edition for Ubuntu 26.04 (GNOME)
@@ -61,8 +61,8 @@ Python packages.
 
 ## Install
 
-1. Download **`eDEX-Tron-Setup-v0.8.0.exe`** from the
-   [v0.8.0 release](../../releases/tag/v0.8.0).
+1. Download **`eDEX-Tron-Setup-v0.9.0.exe`** from the
+   [v0.9.0 release](../../releases/tag/v0.9.0).
 2. Run it. Windows SmartScreen may warn that the app is unrecognised, because
    the installer isn't code-signed: choose **More info → Run anyway**.
 3. Confirm the install location (`Documents\eDEX-Tron`). A PowerShell window
