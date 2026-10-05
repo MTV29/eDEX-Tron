@@ -68,6 +68,7 @@ $tokens = @{
     '%%TERMSCRIPT%%'     = $termScript
     '%%REFRESHSCRIPT%%'  = $refreshScript
     '%%SETTINGSSCRIPT%%' = $settingsScript
+    '%%RELAYOUTSCRIPT%%' = (Join-Path $PSScriptRoot 'relayout.ps1')
     '%%PROJECTROOT%%'    = $root
     '%%KEYSOUND%%'       = $keySound
     '%%VERSION%%'        = $version

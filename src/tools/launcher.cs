@@ -38,6 +38,7 @@ static class EdexTron
     const string TermScript     = @"%%TERMSCRIPT%%";
     const string RefreshScript  = @"%%REFRESHSCRIPT%%";
     const string SettingsScript = @"%%SETTINGSSCRIPT%%";
+    const string RelayoutScript = @"%%RELAYOUTSCRIPT%%";
     const string ProjectRoot    = @"%%PROJECTROOT%%";
     const string KeySound       = @"%%KEYSOUND%%";
     const string Version        = @"%%VERSION%%";
@@ -76,6 +77,8 @@ static class EdexTron
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] static extern uint GetDpiForSystem();
+    [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] static extern bool SystemParametersInfoW(uint action, uint param, ref RECT r, uint winIni);
     [DllImport("winmm.dll", CharSet = CharSet.Unicode)] static extern bool PlaySoundW(string snd, IntPtr mod, uint flags);
     [DllImport("kernel32.dll")] static extern ulong GetTickCount64();
     [DllImport("kernel32.dll")] static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX s);
@@ -96,6 +99,12 @@ static class EdexTron
 
     const uint WM_COMMAND = 0x0111;
     const int WM_HOTKEY = 0x0312;
+    const int WM_DISPLAYCHANGE = 0x007E;
+    const int WM_SETTINGCHANGE = 0x001A;
+    const int SPI_SETWORKAREA = 0x002F;
+    const uint SPI_GETWORKAREA = 0x0030;
+    const int SM_CXSCREEN = 0, SM_CYSCREEN = 1, SM_CMONITORS = 80;
+    const int SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
     const int TOGGLE_DESKTOP_ICONS = 0x7402;
     const int GWL_EXSTYLE = -20;
     const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -440,6 +449,86 @@ static class EdexTron
         keyHook = IntPtr.Zero;
     }
 
+    // ------------------------------------------------------------------- log ---
+    // The background half has no window to report into, so the few things worth
+    // knowing about go to runtime\watcher.log: when it noticed the screen
+    // change, when it rebuilt, and anything it could not do. Trimmed when it
+    // gets long, so it can be left alone forever.
+    static readonly object logLock = new object();
+
+    static void Log(string message)
+    {
+        try
+        {
+            string dir = Path.Combine(ProjectRoot, "runtime");
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, "watcher.log");
+            lock (logLock)
+            {
+                var info = new FileInfo(file);
+                if (info.Exists && info.Length > 64 * 1024)
+                {
+                    var lines = new List<string>(File.ReadAllLines(file));
+                    if (lines.Count > 200) lines.RemoveRange(0, lines.Count - 200);
+                    File.WriteAllLines(file, lines.ToArray());
+                }
+                File.AppendAllText(file,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + message
+                    + Environment.NewLine);
+            }
+        }
+        catch { }
+    }
+
+    // ------------------------------------------------------- display changes ---
+    // The layout is worked out for one screen size. Change the resolution, the
+    // scaling, or plug in a monitor, and it is wrong until relayout.ps1 runs --
+    // which used to mean knowing to run it. The watcher notices instead.
+    static string lastGeometry = "";
+
+    // Asked of Windows every time, never of Screen.AllScreens: that caches, and
+    // its cache is only invalidated by a resolution change -- so moving or
+    // resizing the taskbar, which changes the work area the layout is fitted
+    // to, leaves it reporting the old figures and nothing rebuilds.
+    static string Geometry()
+    {
+        var work = new RECT();
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, ref work, 0);
+        return string.Join("x", new[] {
+            GetDpiForSystem().ToString(),
+            GetSystemMetrics(SM_CXSCREEN).ToString(),
+            GetSystemMetrics(SM_CYSCREEN).ToString(),
+            GetSystemMetrics(SM_CMONITORS).ToString(),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN).ToString(),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN).ToString(),
+            work.Left.ToString(), work.Top.ToString(),
+            work.Right.ToString(), work.Bottom.ToString(),
+        });
+    }
+
+    static void Relayout(bool force)
+    {
+        if (!force && !IsOn()) return;            // nothing on screen to fix
+        if (RelayoutScript.Length == 0 || !File.Exists(RelayoutScript)) return;
+        string now = Geometry();
+        if (!force && now == lastGeometry)
+        {
+            Log("screen change seen, but the geometry is the same (" + now + ") - nothing to do");
+            return;
+        }
+        Log("rebuilding layout: " + (force ? "asked to" : lastGeometry + " -> " + now));
+        lastGeometry = now;
+        try
+        {
+            var psi = new ProcessStartInfo("powershell.exe", PowerShellArgs(RelayoutScript, ""));
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            using (var p = Process.Start(psi)) p.WaitForExit(300000);
+        }
+        catch { }
+        KeepShellInFrame();                       // the frame moved; the shell follows
+    }
+
     // --------------------------------------------------------------- watcher ---
     // The background half of the theme, held single by a mutex and ended by
     // Stop() killing the process. It owns:
@@ -480,10 +569,36 @@ static class EdexTron
             shell.Interval = 1200;
             shell.Tick += (s, a) => { if (Flag("snapshell", true)) KeepShellInFrame(); };
             shell.Start();
+
+            // A display change arrives as a burst of messages, and Windows is
+            // still settling when the first one lands, so rebuild once things
+            // have stopped moving rather than on every message.
+            lastGeometry = Geometry();
+            replan = new System.Windows.Forms.Timer();
+            replan.Interval = 4000;
+            replan.Tick += (s, a) => { replan.Stop(); Relayout(false); };
+            Log("background tasks started; screen is " + lastGeometry);
+        }
+
+        System.Windows.Forms.Timer replan;
+
+        void DisplayChanged(string why)
+        {
+            if (replan == null) return;
+            Log("screen change (" + why + "); checking in 4s");
+            replan.Stop();
+            replan.Start();
         }
 
         protected override void WndProc(ref Message m)
         {
+            // Resolution or monitor count changed, or the taskbar moved or
+            // resized (which changes the work area the layout is fitted to).
+            if (m.Msg == WM_DISPLAYCHANGE)
+                DisplayChanged("resolution or monitors");
+            else if (m.Msg == WM_SETTINGCHANGE && m.WParam.ToInt32() == SPI_SETWORKAREA)
+                DisplayChanged("work area");
+
             if (m.Msg == WM_HOTKEY)
             {
                 switch (m.WParam.ToInt32())
@@ -615,16 +730,68 @@ static class EdexTron
         SetDesktopIcons(true);
     }
 
+    // ---------------------------------------------------------------- repair ---
+    // Everything that can be put right without reinstalling, in the order that
+    // fixes the most: rebuild the layout for whatever the screen is now, bring
+    // back anything that has died, and put the shell and the icons back.
+    static string Repair()
+    {
+        var log = new StringBuilder();
+        bool wasOn = IsOn();
+
+        if (!wasOn)
+        {
+            log.AppendLine("HUD was not running - starting it");
+            StartCore();
+            Thread.Sleep(2000);
+        }
+
+        log.AppendLine("Rebuilding the layout for this screen...");
+        Relayout(true);
+
+        if (!Running("Rainmeter") && RainmeterPath.Length > 0)
+        {
+            StartQuiet(RainmeterPath, "");
+            log.AppendLine("Restarted the HUD");
+        }
+        if (TtbArg.Length > 0 && !Running("TranslucentTB"))
+        {
+            StartQuiet("explorer.exe", TtbArg);
+            log.AppendLine("Restarted the taskbar transparency");
+        }
+        if (!WatcherRunning())
+        {
+            StartWatcher();
+            log.AppendLine("Restarted the background tasks");
+        }
+        if (FindShell() == IntPtr.Zero && TermScript.Length > 0)
+        {
+            StartQuiet("powershell.exe", PowerShellArgs(TermScript, ""));
+            log.AppendLine("Reopened the shell");
+        }
+        else
+        {
+            KeepShellInFrame();
+        }
+        SetDesktopIcons(false);
+
+        log.AppendLine();
+        log.Append(StatusText());
+        return log.ToString();
+    }
+
     // ---------------------------------------------------------------- status ---
     static string StatusText()
     {
         var sb = new StringBuilder();
         sb.AppendLine("eDEX-Tron " + Version + " is currently " + (IsOn() ? "ON" : "OFF") + ".");
         sb.AppendLine();
-        sb.AppendLine("HUD (Rainmeter)      " + (Running("Rainmeter") ? "running" : "stopped"));
-        sb.AppendLine("Taskbar (TranslucentTB) " + (Running("TranslucentTB") ? "running" : "stopped"));
-        sb.AppendLine("Background tasks     " + (WatcherRunning() ? "running" : "stopped"));
-        sb.AppendLine("Shell window         " + (FindShell() != IntPtr.Zero ? "in frame" : "closed"));
+        // A message box draws in a proportional font, so padded columns do not
+        // line up; separate the value with a colon instead.
+        sb.AppendLine("HUD (Rainmeter): " + (Running("Rainmeter") ? "running" : "stopped"));
+        sb.AppendLine("Taskbar (TranslucentTB): " + (Running("TranslucentTB") ? "running" : "stopped"));
+        sb.AppendLine("Background tasks: " + (WatcherRunning() ? "running" : "stopped"));
+        sb.AppendLine("Shell window: " + (FindShell() != IntPtr.Zero ? "in frame" : "closed"));
 
         string noRoom = PlanList("no_room");
         if (noRoom.Length > 0)
@@ -679,9 +846,17 @@ static class EdexTron
                 MessageBox.Show(StatusText(), "eDEX-Tron",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 break;
+            case "repair":
+                MessageBox.Show(Repair(), "eDEX-Tron repair",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                break;
+            case "relayout":
+                Relayout(true);
+                break;
             default:
                 MessageBox.Show(
-                    "Usage: eDEX-Tron.exe [start|stop|toggle|status|settings|boot|watch]",
+                    "Usage: eDEX-Tron.exe "
+                    + "[start|stop|toggle|status|repair|settings|boot|relayout|watch]",
                     "eDEX-Tron", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return 1;
         }

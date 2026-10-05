@@ -82,12 +82,16 @@ powershell -ExecutionPolicy Bypass -File "%USERPROFILE%\Documents\eDEX-Tron\src\
 
 **Turn it on or off** — double-click **eDEX-Tron Theme** on the Desktop or in
 the Start menu, the **Theme** tile in the dock, or press **Win+Alt+E**.
-`eDEX-Tron.exe` also takes `start`, `stop`, `status`, `settings` and `boot`.
+`eDEX-Tron.exe` also takes `start`, `stop`, `status`, `repair`, `settings`,
+`boot` and `relayout`.
 Switching off stops the HUD, the taskbar transparency and the background tasks
 and brings your desktop icons back; your colours stay until you uninstall.
 
 `status` reports what is actually running, and says so if a panel you asked for
-had no room on this screen.
+had no room on this screen. **`repair`** is the one to reach for when something
+looks wrong: it rebuilds the layout for whatever the screen is now, restarts
+anything that has died, puts the shell back in its frame and hides the desktop
+icons again.
 
 **Shell** — click the MAIN SHELL panel to open it, or press **Win+Alt+T**. It
 is a real Command Prompt window moved into the frame, so it is kept there: move
@@ -152,7 +156,11 @@ powershell -ExecutionPolicy Bypass -File "%USERPROFILE%\Documents\eDEX-Tron\src\
 Options: `-Accent`, `-Background`, `-IconColor` (each `#RRGGBB`) and
 `-Grid on|off`. The theme is dark-only, so light backgrounds are refused.
 
-**Changed resolution or scaling?** Run `src\tools\relayout.ps1`.
+**Changed resolution or scaling?** Nothing to do — the theme notices and
+rebuilds itself a few seconds later, whether you changed the resolution, the
+scaling, the number of monitors, or just moved the taskbar.
+`eDEX-Tron.exe relayout` forces it, and `runtime\watcher.log` records what it
+noticed and what it did.
 
 **Taskbar styling (optional)** — Windhawk mods can add accent lines to the
 taskbar; see [windhawk/taskbar-styler.md](windhawk/taskbar-styler.md).
