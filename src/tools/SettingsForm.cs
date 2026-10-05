@@ -1,0 +1,445 @@
+// The settings window: eDEX-Tron.exe settings, or Win+Alt+S.
+//
+// It is a front end for src\tools\settings.ps1 and holds no logic of its own --
+// it reads the current values from "settings.ps1 -Get" and writes changes back
+// by invoking the same script with parameters. That script decides what needs
+// regenerating, so the two can never disagree about what a setting means.
+//
+// Applying can take a minute (new colours re-render the wallpaper and every
+// panel), so it runs on a worker thread with the script's own output shown in
+// the box at the bottom rather than behind a spinner.
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
+
+class SettingsForm : Form
+{
+    readonly string script, projectRoot, version;
+    readonly Color accent, back;
+    Dictionary<string, string> current = new Dictionary<string, string>();
+
+    // colours
+    Button accentSwatch, bgSwatch, iconSwatch;
+    string accentHex = "#aacfd1", bgHex = "#05080d", iconHex = "#4f9dff";
+    CheckBox gridBox;
+
+    // panels
+    readonly Dictionary<string, CheckBox> extraBoxes = new Dictionary<string, CheckBox>();
+    readonly Dictionary<string, CheckBox> standardBoxes = new Dictionary<string, CheckBox>();
+
+    // folder + behaviour
+    TextBox folderBox;
+    CheckBox keyClickBox, hotkeysBox, bootBox, snapBox, altTabBox, autostartBox;
+
+    Button applyButton, closeButton, dockButton;
+    TextBox outputBox;
+    Label statusLabel;
+
+    static readonly string[] Pretty = {
+        "gpu|Graphics card load, memory and temperature",
+        "disk|Free space on every fixed drive",
+        "ports|Listening ports and what is holding them",
+        "clock|Clock, uptime and machine info",
+        "cpuinfo|Per-core CPU graphs",
+        "netstat|Network status",
+        "ramwatcher|Memory map",
+        "conninfo|Network usage graph",
+        "toplist|Top processes",
+    };
+
+    static string Describe(string key)
+    {
+        foreach (string row in Pretty)
+        {
+            string[] parts = row.Split('|');
+            if (parts[0] == key) return parts[1];
+        }
+        return key;
+    }
+
+    public SettingsForm(string script, string projectRoot, Color accent, Color back,
+                        string version)
+    {
+        this.script = script;
+        this.projectRoot = projectRoot;
+        this.accent = accent;
+        this.back = back;
+        this.version = version;
+
+        Text = "eDEX-Tron settings";
+        BackColor = back;
+        ForeColor = accent;
+        Font = new Font("Consolas", 9f);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new Size(620, 660);
+
+        Load += (s, a) => { Reload(); };
+        // Opened from the hotkey this is a brand new process, which Windows
+        // does not necessarily bring to the front; insist once.
+        Shown += (s, a) => { TopMost = true; TopMost = false; Activate(); };
+    }
+
+    // ------------------------------------------------------------- plumbing ---
+    string Run(string args, int timeoutMs)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" " + args);
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+            using (var p = Process.Start(psi))
+            {
+                string outText = p.StandardOutput.ReadToEnd();
+                string errText = p.StandardError.ReadToEnd();
+                p.WaitForExit(timeoutMs);
+                return outText + (errText.Trim().Length > 0 ? "\n" + errText.Trim() : "");
+            }
+        }
+        catch (Exception ex) { return "could not run settings.ps1: " + ex.Message; }
+    }
+
+    static Color Parse(string hex, Color fallback)
+    {
+        try
+        {
+            hex = hex.TrimStart('#');
+            return Color.FromArgb(
+                int.Parse(hex.Substring(0, 2), NumberStyles.HexNumber),
+                int.Parse(hex.Substring(2, 2), NumberStyles.HexNumber),
+                int.Parse(hex.Substring(4, 2), NumberStyles.HexNumber));
+        }
+        catch { return fallback; }
+    }
+
+    static string Hex(Color c)
+    {
+        return "#" + c.R.ToString("x2") + c.G.ToString("x2") + c.B.ToString("x2");
+    }
+
+    static Color Readable(Color on)
+    {
+        double luma = (0.2126 * on.R + 0.7152 * on.G + 0.0722 * on.B) / 255.0;
+        return luma > 0.45 ? Color.Black : Color.White;
+    }
+
+    bool On(string key, bool fallback)
+    {
+        string v;
+        if (current.TryGetValue(key, out v)) return v == "on";
+        return fallback;
+    }
+
+    string Get(string key)
+    {
+        string v;
+        return current.TryGetValue(key, out v) ? v : "";
+    }
+
+    List<string> List(string key)
+    {
+        var items = new List<string>();
+        foreach (string s in Get(key).Split(','))
+            if (s.Trim().Length > 0) items.Add(s.Trim());
+        return items;
+    }
+
+    void Reload()
+    {
+        current = new Dictionary<string, string>();
+        foreach (string line in Run("-Get", 30000).Split('\n'))
+        {
+            int eq = line.IndexOf('=');
+            if (eq > 0) current[line.Substring(0, eq).Trim()] = line.Substring(eq + 1).Trim();
+        }
+        Controls.Clear();
+        Build();
+    }
+
+    // ----------------------------------------------------------------- look ---
+    Label Heading(string text, int y)
+    {
+        var l = new Label();
+        l.Text = text.ToUpperInvariant();
+        l.Location = new Point(18, y);
+        l.AutoSize = true;
+        l.ForeColor = accent;
+        l.Font = new Font("Consolas", 9f, FontStyle.Bold);
+        Controls.Add(l);
+
+        var rule = new Panel();
+        rule.Location = new Point(18, y + 18);
+        rule.Size = new Size(ClientSize.Width - 36, 1);
+        rule.BackColor = Color.FromArgb(70, accent);
+        Controls.Add(rule);
+        return l;
+    }
+
+    Label Note(string text, int x, int y)
+    {
+        var l = new Label();
+        l.Text = text;
+        l.Location = new Point(x, y);
+        l.AutoSize = true;
+        l.ForeColor = Color.FromArgb(150, accent);
+        Controls.Add(l);
+        return l;
+    }
+
+    readonly ToolTip tips = new ToolTip();
+
+    CheckBox Check(string text, bool value, int x, int y, string tip = null)
+    {
+        var c = new CheckBox();
+        c.Text = text;
+        c.Checked = value;
+        c.Location = new Point(x, y);
+        c.AutoSize = true;
+        c.ForeColor = accent;
+        c.BackColor = back;
+        c.FlatStyle = FlatStyle.Flat;
+        Controls.Add(c);
+        // The descriptions are long enough to collide with the next column, so
+        // they live in a tooltip and the box carries the name alone.
+        if (tip != null) tips.SetToolTip(c, tip);
+        return c;
+    }
+
+    Button Flat(string text, int x, int y, int w, EventHandler click)
+    {
+        var b = new Button();
+        b.Text = text;
+        b.Location = new Point(x, y);
+        b.Size = new Size(w, 26);
+        b.FlatStyle = FlatStyle.Flat;
+        b.BackColor = back;
+        b.ForeColor = accent;
+        b.FlatAppearance.BorderColor = Color.FromArgb(120, accent);
+        b.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, accent);
+        b.Click += click;
+        Controls.Add(b);
+        return b;
+    }
+
+    Button Swatch(string hex, int x, int y, Action<string> set)
+    {
+        var b = new Button();
+        b.Location = new Point(x, y);
+        b.Size = new Size(120, 24);
+        b.FlatStyle = FlatStyle.Flat;
+        b.BackColor = Parse(hex, accent);
+        // The background swatch is nearly black, so black-on-black would hide
+        // its own label; pick whichever of black or white can be read on it.
+        b.ForeColor = Readable(b.BackColor);
+        b.Text = hex;
+        b.FlatAppearance.BorderColor = Color.FromArgb(120, accent);
+        b.Click += (s, a) =>
+        {
+            using (var dlg = new ColorDialog())
+            {
+                dlg.Color = b.BackColor;
+                dlg.FullOpen = true;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                b.BackColor = dlg.Color;
+                b.ForeColor = Readable(dlg.Color);
+                b.Text = Hex(dlg.Color);
+                set(Hex(dlg.Color));
+            }
+        };
+        Controls.Add(b);
+        return b;
+    }
+
+    // ---------------------------------------------------------------- build ---
+    void Build()
+    {
+        accentHex = Get("accent");
+        bgHex = Get("background");
+        iconHex = Get("icon");
+        var noRoom = List("noroom");
+        var panelsOn = List("panels");
+        var switchedOff = List("off");
+
+        int y = 14;
+        Heading("Colours", y); y += 30;
+        Note("Accent", 20, y + 4);
+        accentSwatch = Swatch(accentHex, 110, y, v => accentHex = v);
+        Note("Background", 250, y + 4);
+        bgSwatch = Swatch(bgHex, 350, y, v => bgHex = v);
+        y += 32;
+        Note("Icon", 20, y + 4);
+        iconSwatch = Swatch(iconHex, 110, y, v => iconHex = v);
+        gridBox = Check("Grid on the wallpaper", On("grid", false), 250, y + 3);
+        y += 40;
+
+        Heading("Extra panels", y); y += 28;
+        var optional = List("optional");
+        for (int i = 0; i < optional.Count; i++)
+        {
+            string key = optional[i];
+            bool fits = !noRoom.Contains(key);
+            extraBoxes[key] = Check(key.ToUpperInvariant() + (fits ? "" : "  (no room)"),
+                                    panelsOn.Contains(key),
+                                    20 + i * 190, y, Describe(key));
+        }
+        y += 24;
+        if (noRoom.Count > 0)
+            Note("No room: on, but this screen cannot fit it -- turn one below off.",
+                 20, y + 2);
+        else
+            Note("Hover a name for what it shows.", 20, y + 2);
+        y += 30;
+
+        Heading("Standard panels", y); y += 28;
+        var standard = List("standard");
+        for (int i = 0; i < standard.Count; i++)
+        {
+            string key = standard[i];
+            standardBoxes[key] = Check(key.ToUpperInvariant(), !switchedOff.Contains(key),
+                                       20 + (i % 3) * 190, y + (i / 3) * 24, Describe(key));
+        }
+        y += ((standard.Count + 2) / 3) * 24 + 14;
+
+        Heading("Folder panel", y); y += 28;
+        folderBox = new TextBox();
+        folderBox.Text = Get("folderraw");
+        folderBox.Location = new Point(20, y);
+        folderBox.Size = new Size(440, 22);
+        folderBox.BackColor = Color.FromArgb(16, 20, 28);
+        folderBox.ForeColor = accent;
+        folderBox.BorderStyle = BorderStyle.FixedSingle;
+        Controls.Add(folderBox);
+        Flat("Browse", 470, y - 2, 80, (s, a) =>
+        {
+            using (var dlg = new FolderBrowserDialog())
+            {
+                dlg.SelectedPath = Environment.ExpandEnvironmentVariables(folderBox.Text);
+                if (dlg.ShowDialog(this) == DialogResult.OK) folderBox.Text = dlg.SelectedPath;
+            }
+        });
+        y += 40;
+
+        Heading("Behaviour", y); y += 28;
+        keyClickBox = Check("Audible key clicks", On("keyclick", false), 20, y,
+                            "A click on every keystroke, the way eDEX-UI has one");
+        hotkeysBox = Check("Hotkeys", On("hotkeys", true), 300, y,
+                           "Win+Alt+H hide the HUD, T the shell, E on/off, S these settings");
+        y += 24;
+        bootBox = Check("Boot screen at start", On("bootscreen", true), 20, y,
+                        "The eDEX startup log, with this machine's own figures");
+        snapBox = Check("Keep the shell in its frame", On("snapshell", true), 300, y,
+                        "Put the shell window back if something moves or resizes it");
+        y += 24;
+        altTabBox = Check("Shell in Alt-Tab", On("shellalttab", false), 20, y,
+                          "Off keeps the shell out of the window switcher, as part of the HUD");
+        autostartBox = Check("Start when I log in", On("autostart", false), 300, y,
+                             "A shortcut in your Startup folder");
+        y += 26;
+        Note("Win+Alt+H hide HUD, T shell, E on/off, S settings.", 20, y);
+        y += 26;
+
+        outputBox = new TextBox();
+        outputBox.Multiline = true;
+        outputBox.ReadOnly = true;
+        outputBox.ScrollBars = ScrollBars.Vertical;
+        outputBox.Location = new Point(20, y);
+        outputBox.Size = new Size(ClientSize.Width - 40, 96);
+        outputBox.BackColor = Color.FromArgb(10, 13, 19);
+        outputBox.ForeColor = Color.FromArgb(200, accent);
+        outputBox.BorderStyle = BorderStyle.FixedSingle;
+        Controls.Add(outputBox);
+        y += 104;
+
+        statusLabel = Note("eDEX-Tron " + version, 20, y + 6);
+        dockButton = Flat("Edit dock", 290, y, 100, (s, a) =>
+        {
+            try { Process.Start("notepad.exe", Path.Combine(projectRoot, "dock.txt")); }
+            catch (Exception ex) { outputBox.Text = ex.Message; }
+        });
+        applyButton = Flat("Apply", 400, y, 100, (s, a) => Apply());
+        closeButton = Flat("Close", 510, y, 90, (s, a) => Close());
+        ClientSize = new Size(620, y + 44);
+    }
+
+    // ---------------------------------------------------------------- apply ---
+    static string Switch(string name, bool value) { return " -" + name + (value ? " on" : " off"); }
+
+    void Apply()
+    {
+        var args = new StringBuilder();
+
+        if (accentHex != Get("accent")) args.Append(" -Accent " + accentHex);
+        if (bgHex != Get("background")) args.Append(" -Background " + bgHex);
+        if (iconHex != Get("icon")) args.Append(" -IconColor " + iconHex);
+        if (gridBox.Checked != On("grid", false)) args.Append(Switch("Grid", gridBox.Checked));
+
+        var wanted = new List<string>();
+        foreach (var kv in extraBoxes) if (kv.Value.Checked) wanted.Add(kv.Key);
+        wanted.Sort();
+        var was = List("panels"); was.Sort();
+        if (string.Join(",", wanted.ToArray()) != string.Join(",", was.ToArray()))
+            args.Append(" -Panels " + (wanted.Count > 0 ? string.Join(",", wanted.ToArray()) : "none"));
+
+        var offNow = new List<string>();
+        foreach (var kv in standardBoxes) if (!kv.Value.Checked) offNow.Add(kv.Key);
+        offNow.Sort();
+        var offWas = List("off"); offWas.Sort();
+        if (string.Join(",", offNow.ToArray()) != string.Join(",", offWas.ToArray()))
+            args.Append(" -Off " + (offNow.Count > 0 ? string.Join(",", offNow.ToArray()) : "none"));
+
+        if (folderBox.Text.Trim() != Get("folderraw"))
+            args.Append(" -Folder \"" + folderBox.Text.Trim() + "\"");
+
+        if (keyClickBox.Checked != On("keyclick", false)) args.Append(Switch("KeyClick", keyClickBox.Checked));
+        if (hotkeysBox.Checked != On("hotkeys", true)) args.Append(Switch("Hotkeys", hotkeysBox.Checked));
+        if (bootBox.Checked != On("bootscreen", true)) args.Append(Switch("BootScreen", bootBox.Checked));
+        if (snapBox.Checked != On("snapshell", true)) args.Append(Switch("SnapShell", snapBox.Checked));
+        if (altTabBox.Checked != On("shellalttab", false)) args.Append(Switch("ShellAltTab", altTabBox.Checked));
+        if (autostartBox.Checked != On("autostart", false)) args.Append(Switch("Autostart", autostartBox.Checked));
+
+        if (args.Length == 0)
+        {
+            outputBox.Text = "nothing changed";
+            return;
+        }
+
+        SetBusy(true);
+        outputBox.Text = "applying" + args + Environment.NewLine;
+        string argLine = args.ToString();
+        var worker = new Thread(() =>
+        {
+            // Colours re-render the wallpaper and every panel, so give it room.
+            string result = Run(argLine, 600000);
+            BeginInvoke((MethodInvoker)(() =>
+            {
+                outputBox.Text = (outputBox.Text + result).Trim();
+                SetBusy(false);
+                string keep = outputBox.Text;
+                Reload();                       // pick the new values back up
+                outputBox.Text = keep;
+            }));
+        });
+        worker.IsBackground = true;
+        worker.Start();
+    }
+
+    void SetBusy(bool busy)
+    {
+        applyButton.Enabled = !busy;
+        applyButton.Text = busy ? "Working..." : "Apply";
+        dockButton.Enabled = !busy;
+        Cursor = busy ? Cursors.WaitCursor : Cursors.Default;
+    }
+}

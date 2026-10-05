@@ -1,24 +1,23 @@
-﻿<#
+<#
 .SYNOPSIS
-    Compile eDEX-Tron.exe, the theme's on/off switch.
+    Compile eDEX-Tron.exe -- the theme's switch, settings window and boot screen.
 
 .DESCRIPTION
-    Produces a small GUI executable (no console flash) that starts or stops the
-    live parts of the theme: the Rainmeter HUD, TranslucentTB's taskbar
-    transparency, the shell window, and the desktop icons -- which the dock
-    replaces, so they are hidden while the theme is on and restored when it is
-    off.
+    The C# lives in launcher.cs, BootScreen.cs and SettingsForm.cs next to this
+    script. Paths that differ per machine (where Rainmeter installed itself,
+    which package TranslucentTB is) are resolved here and substituted into the
+    %%TOKENS%% in launcher.cs, so the compiled exe needs no config file.
 
-        eDEX-Tron.exe            toggle
-        eDEX-Tron.exe start
-        eDEX-Tron.exe stop
-        eDEX-Tron.exe status     shows a message box
+        eDEX-Tron.exe                 toggle
+        eDEX-Tron.exe start|stop
+        eDEX-Tron.exe status          what is running
+        eDEX-Tron.exe settings        the settings window
+        eDEX-Tron.exe boot            replay the boot screen
+        eDEX-Tron.exe watch           hotkeys, key clicks, folder watchers,
+                                      and keeping the shell in its frame
 
-    It deliberately does NOT touch the wallpaper, accent colour or fonts --
-    those are the persistent theme; src\uninstall.ps1 reverts them.
-
-    Uses the .NET compiler that ships with Windows, so nothing extra is needed.
-    Machine-specific paths are baked in at build time.
+    Uses the C# compiler that ships with the .NET Framework, which is present
+    on every Windows install, so there is nothing extra to download.
 #>
 param(
     [string]$OutFile
@@ -27,8 +26,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $OutFile) { $OutFile = Join-Path $root 'eDEX-Tron.exe' }
+$docs = [Environment]::GetFolderPath('MyDocuments')
 
-# --- resolve what this machine actually has
+# --- resolve what this machine actually has ---------------------------------
 $rainmeter = Join-Path ${env:ProgramFiles} 'Rainmeter\Rainmeter.exe'
 if (-not (Test-Path $rainmeter)) { Write-Warning "Rainmeter not found at $rainmeter" }
 
@@ -37,295 +37,106 @@ $pkg = Get-AppxPackage -Name '*TranslucentTB*' -ErrorAction SilentlyContinue | S
 if ($pkg) { $ttbArg = "shell:AppsFolder\$($pkg.PackageFamilyName)!TranslucentTB" }
 else { Write-Warning 'TranslucentTB not installed; the launcher will skip it' }
 
-$termScript = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Rainmeter\Skins\eDEX-Tron\@Resources\launch_terminal.ps1'
-$refreshScript = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Rainmeter\Skins\eDEX-Tron\@Resources\refresh_desktop.ps1'
+$liveRes      = Join-Path $docs 'Rainmeter\Skins\eDEX-Tron\@Resources'
+$termScript   = Join-Path $liveRes 'launch_terminal.ps1'
+$refreshScript= Join-Path $liveRes 'refresh_desktop.ps1'
+$settingsScript = Join-Path $PSScriptRoot 'settings.ps1'
 
-function Esc($s) { $s -replace '\\', '\\' -replace '"', '\"' }
-
-$source = @"
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading;
-using System.Text;
-using System.Windows.Forms;
-
-static class EdexTron
-{
-    const string RainmeterPath = "$(Esc $rainmeter)";
-    const string TtbArg        = "$(Esc $ttbArg)";
-    const string TermScript    = "$(Esc $termScript)";
-    const string RefreshScript = "$(Esc $refreshScript)";
-    const string WatcherMutex  = @"Local\eDEX-Tron-DesktopWatcher";
-
-    // CharSet.Unicode is required on every one of these: the default is Ansi,
-    // which marshals the class names as narrow strings into the wide-char
-    // entry points, so the lookups silently never match.
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowW(string cls, string win);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowExW(IntPtr parent, IntPtr after, string cls, string win);
-    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
-    [DllImport("user32.dll")] static extern IntPtr SendMessageW(IntPtr h, uint msg, IntPtr wp, IntPtr lp);
-    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
-    delegate bool EnumProc(IntPtr h, IntPtr l);
-
-    const uint WM_COMMAND = 0x0111;
-    const int TOGGLE_DESKTOP_ICONS = 0x7402;
-
-    // The icon list lives under SHELLDLL_DefView, which hangs off Progman on a
-    // plain desktop but moves to a WorkerW once a wallpaper host has run.
-    static IntPtr FindDefView()
-    {
-        IntPtr progman = FindWindowW("Progman", null);
-        IntPtr view = FindWindowExW(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
-        if (view != IntPtr.Zero) return view;
-
-        IntPtr found = IntPtr.Zero;
-        EnumWindows((h, l) =>
-        {
-            var cls = new StringBuilder(64);
-            GetClassNameW(h, cls, 64);
-            if (cls.ToString() == "WorkerW")
-            {
-                IntPtr v = FindWindowExW(h, IntPtr.Zero, "SHELLDLL_DefView", null);
-                if (v != IntPtr.Zero) { found = v; return false; }
-            }
-            return true;
-        }, IntPtr.Zero);
-        return found;
-    }
-
-    static bool DesktopIconsVisible()
-    {
-        IntPtr view = FindDefView();
-        if (view == IntPtr.Zero) return true;
-        IntPtr list = FindWindowExW(view, IntPtr.Zero, "SysListView32", null);
-        return list != IntPtr.Zero && IsWindowVisible(list);
-    }
-
-    static void SetDesktopIcons(bool show)
-    {
-        if (DesktopIconsVisible() == show) return;
-        IntPtr view = FindDefView();
-        if (view != IntPtr.Zero)
-            SendMessageW(view, WM_COMMAND, (IntPtr)TOGGLE_DESKTOP_ICONS, IntPtr.Zero);
-    }
-
-    static bool Running(string name)
-    {
-        return Process.GetProcessesByName(name).Length > 0;
-    }
-
-    static void Kill(string name)
-    {
-        foreach (var p in Process.GetProcessesByName(name))
-        {
-            try { p.Kill(); p.WaitForExit(4000); } catch { }
-        }
-    }
-
-    static void StartQuiet(string file, string args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo(file, args);
-            psi.UseShellExecute = true;
-            psi.WindowStyle = ProcessWindowStyle.Hidden;
-            Process.Start(psi);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show("Could not start:\n" + file + "\n\n" + ex.Message,
-                "eDEX-Tron", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
-    static bool IsOn() { return Running("Rainmeter"); }
-
-    // The Folder panel's folder, as relayout.ps1 recorded it from theme.json.
-    static string FolderPanelPath()
-    {
-        try
-        {
-            string file = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "eDEX-Tron", "runtime", "folder-path.txt");
-            if (File.Exists(file))
-            {
-                string path = Environment.ExpandEnvironmentVariables(File.ReadAllText(file).Trim());
-                if (path.Length > 0) return path;
-            }
-        }
-        catch { }
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Games");
-    }
-
-    // ---- Desktop watcher ------------------------------------------------
-    // The Desktop panel is generated (icons come from the shell), so it has to
-    // be rebuilt when the folder changes. A FileSystemWatcher is event-driven:
-    // nothing polls, and it catches renames that an item count would miss.
-    // It runs as a second copy of this exe ("watch"), held single by a mutex.
-
-    static bool WatcherRunning()
-    {
-        try { using (Mutex.OpenExisting(WatcherMutex)) return true; }
-        catch { return false; }
-    }
-
-    static void RunRefresh(string panel)
-    {
-        if (!File.Exists(RefreshScript)) return;
-        try
-        {
-            var psi = new ProcessStartInfo("powershell.exe",
-                "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + RefreshScript
-                + "\" -Panel " + panel);
-            psi.UseShellExecute = false;
-            psi.CreateNoWindow = true;
-            using (var p = Process.Start(psi)) p.WaitForExit(120000);
-        }
-        catch { }
-    }
-
-    static void Watch()
-    {
-        bool created;
-        using (var mutex = new Mutex(true, WatcherMutex, out created))
-        {
-            if (!created) return;               // one watcher is enough
-
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            RunRefresh("Both");                 // catch changes made while the theme was off
-
-            // Debounce: a copy or unzip fires many events; rebuild once they settle.
-            var watchers = new System.Collections.Generic.List<FileSystemWatcher>();
-            foreach (var pair in new[] { Tuple.Create("Desktop", desktop),
-                                         Tuple.Create("Folder", FolderPanelPath()) })
-            {
-                string panel = pair.Item1, dir = pair.Item2;
-                if (dir == null || !Directory.Exists(dir)) continue;
-                var timer = new System.Threading.Timer(_ => RunRefresh(panel), null,
-                    Timeout.Infinite, Timeout.Infinite);
-                FileSystemEventHandler changed = (s, e) => timer.Change(1500, Timeout.Infinite);
-                var fsw = new FileSystemWatcher(dir);
-                fsw.IncludeSubdirectories = false;
-                fsw.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName;
-                fsw.Created += changed;
-                fsw.Deleted += changed;
-                fsw.Renamed += (s, e) => timer.Change(1500, Timeout.Infinite);
-                fsw.EnableRaisingEvents = true;
-                watchers.Add(fsw);
-            }
-
-            Thread.Sleep(Timeout.Infinite);     // ended by Stop() killing this process
-        }
-    }
-
-    static void StopWatcher()
-    {
-        int self = Process.GetCurrentProcess().Id;
-        foreach (var p in Process.GetProcessesByName(Process.GetCurrentProcess().ProcessName))
-        {
-            if (p.Id == self) continue;
-            try { p.Kill(); p.WaitForExit(4000); } catch { }
-        }
-    }
-
-    static void Start()
-    {
-        if (RainmeterPath.Length > 0 && !Running("Rainmeter"))
-            StartQuiet(RainmeterPath, "");
-
-        if (TtbArg.Length > 0 && !Running("TranslucentTB"))
-            StartQuiet("explorer.exe", TtbArg);
-
-        SetDesktopIcons(false);
-
-        if (TermScript.Length > 0)
-            StartQuiet("powershell.exe",
-                "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + TermScript + "\"");
-
-        if (!WatcherRunning())
-            StartQuiet(Process.GetCurrentProcess().MainModule.FileName, "watch");
-    }
-
-    static void Stop()
-    {
-        Kill("Rainmeter");
-        Kill("TranslucentTB");
-        StopWatcher();
-        SetDesktopIcons(true);
-    }
-
-    [STAThread]
-    static int Main(string[] argv)
-    {
-        string cmd = argv.Length > 0 ? argv[0].ToLowerInvariant().TrimStart('-', '/') : "toggle";
-        switch (cmd)
-        {
-            case "start":  Start(); break;
-            case "stop":   Stop();  break;
-            case "watch":  Watch(); break;
-            case "status":
-                MessageBox.Show("eDEX-Tron is currently " + (IsOn() ? "ON" : "OFF") + ".",
-                    "eDEX-Tron", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                break;
-            case "toggle": if (IsOn()) Stop(); else Start(); break;
-            default:
-                MessageBox.Show("Usage: eDEX-Tron.exe [start|stop|toggle|status|watch]",
-                    "eDEX-Tron", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return 1;
-        }
-        return 0;
-    }
+# The key click we render ourselves, deliberately in preference to eDEX-UI's
+# keyboard.wav even when that has been copied out of a local install: theirs is
+# a 1.2-second run of typing, not one keystroke, so restarting it on every key
+# would be a rattle rather than a click.
+$keySound = Join-Path $root 'assets\sounds\gen\key.wav'
+if (-not (Test-Path $keySound)) {
+    try { & python (Join-Path $PSScriptRoot 'gen_sounds.py') | Out-Null } catch { }
 }
-"@
-
-# Compile with csc.exe rather than Add-Type: only csc can attach a Win32 icon
-# resource (/win32icon), and Add-Type exposes no equivalent. csc ships with the
-# .NET Framework that is present on every Windows install.
-$icon = Join-Path $root 'assets\icon\edex-tron.ico'
-$csc = @("$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
-         "$env:SystemRoot\Microsoft.NET\Framework\v4.0.30319\csc.exe") |
-       Where-Object { Test-Path $_ } | Select-Object -First 1
-
-$watcherWasUp = [bool](Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($OutFile)) -ErrorAction SilentlyContinue)
-Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($OutFile)) -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Milliseconds 300
-
-if ($csc -and (Test-Path $icon)) {
-    $cs = Join-Path ([IO.Path]::GetTempPath()) ("edex-tron-{0}.cs" -f [guid]::NewGuid().ToString('N'))
-    $source | Set-Content $cs -Encoding UTF8
-    try {
-        $args = @('/nologo', '/target:winexe', '/optimize+',
-                  "/win32icon:$icon", "/out:$OutFile",
-                  '/reference:System.dll',
-                  '/reference:System.Windows.Forms.dll',
-                  '/reference:System.Drawing.dll', $cs)
-        $out = & $csc @args 2>&1
-        if ($LASTEXITCODE -ne 0) { throw ($out | Out-String) }
-        "built $OutFile ({0:N0} bytes) with embedded icon" -f (Get-Item $OutFile).Length
-    } finally {
-        Remove-Item $cs -Force -ErrorAction SilentlyContinue
-    }
-} else {
-    if (-not $icon -or -not (Test-Path $icon)) {
-        Write-Warning "No icon at $icon - run src\tools\gen_icon.py first"
-    }
-    Add-Type -TypeDefinition $source `
-             -OutputAssembly $OutFile `
-             -OutputType WindowsApplication `
-             -ReferencedAssemblies 'System.Windows.Forms', 'System.Drawing'
-    "built $OutFile ({0:N0} bytes) without icon" -f (Get-Item $OutFile).Length
+if (-not (Test-Path $keySound)) {
+    Write-Warning 'No key click sound; run src\tools\gen_sounds.py'
+    $keySound = ''
 }
-"  Rainmeter : $rainmeter"
+
+$version = '0.9.0'
+$versionFile = Join-Path $root 'VERSION'
+if (Test-Path $versionFile) { $version = (Get-Content $versionFile -Raw).Trim() }
+
+# --- substitute the per-machine paths ---------------------------------------
+# Every token sits inside a C# verbatim string, so a Windows path needs no
+# escaping at all -- only a double quote would, and none of these can contain one.
+$tokens = @{
+    '%%RAINMETER%%'      = $rainmeter
+    '%%TTBARG%%'         = $ttbArg
+    '%%TERMSCRIPT%%'     = $termScript
+    '%%REFRESHSCRIPT%%'  = $refreshScript
+    '%%SETTINGSSCRIPT%%' = $settingsScript
+    '%%PROJECTROOT%%'    = $root
+    '%%KEYSOUND%%'       = $keySound
+    '%%VERSION%%'        = $version
+}
+
+$sources = @('launcher.cs', 'BootScreen.cs', 'SettingsForm.cs') |
+           ForEach-Object { Join-Path $PSScriptRoot $_ }
+foreach ($s in $sources) {
+    if (-not (Test-Path $s)) { throw "missing source file: $s" }
+}
+
+$work = Join-Path ([IO.Path]::GetTempPath()) ("edex-tron-{0}" -f [guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Force -Path $work | Out-Null
+$compile = @()
+try {
+    foreach ($s in $sources) {
+        $text = Get-Content $s -Raw
+        foreach ($k in $tokens.Keys) {
+            if ($tokens[$k] -like '*"*') { throw "path contains a quote: $($tokens[$k])" }
+            $text = $text.Replace($k, $tokens[$k])
+        }
+        $left = [regex]::Matches($text, '%%\w+%%') | ForEach-Object { $_.Value } | Select-Object -Unique
+        if ($left) { throw "unreplaced token(s) in $(Split-Path $s -Leaf): $($left -join ', ')" }
+        $dest = Join-Path $work (Split-Path $s -Leaf)
+        # No BOM: csc copes, but it shows up in error messages as a stray glyph.
+        [IO.File]::WriteAllText($dest, $text, (New-Object Text.UTF8Encoding $false))
+        $compile += $dest
+    }
+
+    # Compile with csc.exe rather than Add-Type: only csc can attach a Win32
+    # icon resource (/win32icon), and Add-Type exposes no equivalent.
+    $icon = Join-Path $root 'assets\icon\edex-tron.ico'
+    $csc = @("$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+             "$env:SystemRoot\Microsoft.NET\Framework\v4.0.30319\csc.exe") |
+           Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $csc) { throw 'csc.exe not found; is the .NET Framework present?' }
+
+    $name = [IO.Path]::GetFileNameWithoutExtension($OutFile)
+    $watcherWasUp = [bool](Get-Process -Name $name -ErrorAction SilentlyContinue)
+    Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Milliseconds 300
+
+    $cscArgs = @('/nologo', '/target:winexe', '/optimize+', "/out:$OutFile",
+                 '/reference:System.dll',
+                 '/reference:System.Windows.Forms.dll',
+                 '/reference:System.Drawing.dll',
+                 '/reference:System.ServiceProcess.dll')
+    if (Test-Path $icon) { $cscArgs += "/win32icon:$icon" }
+    else { Write-Warning "No icon at $icon - run src\tools\gen_icon.py first" }
+
+    $ErrorActionPreference = 'Continue'
+    $out = & $csc @cscArgs @compile 2>&1
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw ($out | Out-String) }
+
+    "built $OutFile ({0:N0} bytes)" -f (Get-Item $OutFile).Length
+} finally {
+    Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+"  version       : $version"
+"  Rainmeter     : $rainmeter"
 "  TranslucentTB : $(if ($ttbArg) { $ttbArg } else { '(not installed)' })"
 "  shell script  : $termScript"
+"  settings      : $settingsScript"
+"  key click     : $(if ($keySound) { $keySound } else { '(none)' })"
 
 if ($watcherWasUp -and (Get-Process Rainmeter -ErrorAction SilentlyContinue)) {
     # Win32_Process.Create: survive this script ending, even under Task Scheduler
     [void](Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "`"$OutFile`" watch" })
-    "  desktop watcher restarted"
+    '  background tasks restarted'
 }
