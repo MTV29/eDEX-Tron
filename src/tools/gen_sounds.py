@@ -22,7 +22,7 @@ import wave
 RATE = 44100
 
 
-def click(dur=0.016, tone=170.0, bright=0.5, peak=0.22, seed=7):
+def click(dur=0.024, tone=190.0, bright=0.42, peak=0.45, seed=7):
     """One keystroke, as a list of floats in -1..1.
 
     `bright` is the noise lowpass coefficient: 1.0 is raw white noise (a sharp
@@ -36,8 +36,11 @@ def click(dur=0.016, tone=170.0, bright=0.5, peak=0.22, seed=7):
     for i in range(n):
         t = i / RATE
         lp += bright * (rnd.uniform(-1.0, 1.0) - lp)
-        body = math.sin(2 * math.pi * tone * t) * math.exp(-t / 0.006)
-        env = math.exp(-t / (dur * 0.26))
+        # Two decaying tones rather than one: the lower gives the stroke enough
+        # weight to be heard over laptop speakers, where a pure tick vanishes.
+        body = (math.sin(2 * math.pi * tone * t) * math.exp(-t / 0.008)
+                + 0.6 * math.sin(2 * math.pi * (tone * 0.5) * t) * math.exp(-t / 0.012))
+        env = math.exp(-t / (dur * 0.30))
         if i < attack:
             env *= i / attack
         out.append((lp * 0.85 + body * 0.55) * env)

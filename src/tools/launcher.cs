@@ -71,7 +71,7 @@ static class EdexTron
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int index, int value);
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
-    [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, HookProc cb, IntPtr mod, uint tid);
+    [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, HookProc cb, IntPtr mod, uint tid);
     [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wp, IntPtr lp);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
@@ -436,10 +436,19 @@ static class EdexTron
     static void StartKeyClicks()
     {
         if (keyHook != IntPtr.Zero) return;
-        if (KeySound.Length == 0 || !File.Exists(KeySound)) return;
+        if (KeySound.Length == 0 || !File.Exists(KeySound))
+        {
+            Log("key clicks wanted, but no sound file at: "
+                + (KeySound.Length == 0 ? "(none built in)" : KeySound));
+            return;
+        }
         keySoundFile = KeySound;
         keyHookProc = OnKey;
         keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyHookProc, IntPtr.Zero, 0);
+        Log(keyHook != IntPtr.Zero
+            ? "key clicks on, playing " + keySoundFile
+            : "key clicks wanted, but the keyboard hook was refused (error "
+              + Marshal.GetLastWin32Error() + ")");
     }
 
     static void StopKeyClicks()
