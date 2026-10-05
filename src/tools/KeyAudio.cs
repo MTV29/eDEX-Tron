@@ -87,12 +87,23 @@ static class KeyAudio
             if (err != 0) { device = IntPtr.Zero; problem = "waveOutOpen failed (" + err + ")"; return false; }
 
             hdrSize = Marshal.SizeOf(typeof(WAVEHDR));
+
+            // Stretch whatever sample this is to the length a keystroke should
+            // sound, then spread the variants around that -- rather than
+            // around however long the source happened to be. Resampling moves
+            // the pitch with it, which is the point: a longer click is also a
+            // slightly deeper one, as it would be on a bigger key.
+            double targetMs = EdexTron.Number("keyclickms", 43.0);
+            double sourceMs = pcm.Length / (double)channels / rate * 1000.0;
+            double baseSpeed = targetMs > 1.0 ? sourceMs / targetMs : 1.0;
+
             for (int v = 0; v < VARIANTS; v++)
             {
-                // Spread the variants either side of the original: a little
-                // slower and quieter through a little faster and louder.
+                // Either side of that: a little slower and quieter through a
+                // little faster and louder.
                 double spread = VARIANTS == 1 ? 0.0 : (v / (double)(VARIANTS - 1)) * 2.0 - 1.0;
-                short[] shaped = Reshape(pcm, 1.0 + spread * 0.05, 1.0 - Math.Abs(spread) * 0.18);
+                short[] shaped = Reshape(pcm, baseSpeed * (1.0 + spread * 0.05),
+                                         1.0 - Math.Abs(spread) * 0.18);
                 byte[] raw = new byte[shaped.Length * 2];
                 Buffer.BlockCopy(shaped, 0, raw, 0, raw.Length);
 

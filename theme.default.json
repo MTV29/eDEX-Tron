@@ -10,5 +10,6 @@
     "ports"
   ],
   "off": [],
-  "bootsoundspeed": 1.6
+  "bootsoundspeed": 1.6,
+  "keyclickms": 43
 }
