@@ -109,6 +109,18 @@ if ($backup) {
         Write-Warn2 'Previous wallpaper file is gone; pick one in Personalization.'
     }
 
+    # ---- theme selection
+    # install.ps1 writes eDEX-Tron.theme, and this script is about to delete the
+    # folder it lives in. If Windows is still pointing at it, Personalization is
+    # left showing a theme whose file does not exist, so put the old one back.
+    $themesKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes'
+    $currentTheme = (Get-ItemProperty -Path $themesKey -Name 'CurrentTheme' `
+                     -ErrorAction SilentlyContinue).CurrentTheme
+    if ($currentTheme -like '*eDEX-Tron.theme') {
+        Restore-Value $themesKey 'CurrentTheme' $backup.CurrentTheme 'String'
+        Write-Ok "Theme selection -> $(if ($backup.CurrentTheme) { $backup.CurrentTheme } else { '(none)' })"
+    }
+
     # ---- sounds
     Write-Step 'Restoring sound events'
     foreach ($prop in $backup.Sounds.PSObject.Properties) {

@@ -236,6 +236,7 @@ setting means. `settings.ps1` works perfectly well on its own.
 | `src\dev\test_plan.py` | 13824 layouts asserted free of overlaps and off-screen panels. Run it after touching the planner: Rainmeter reports nothing when two skins land on top of each other |
 | `src\dev\skin_rects.ps1` | Where the panels actually ended up, live |
 | `src\dev\capture_window.ps1` | A picture of one window, by title — never the whole screen |
+| `src\dev\verify_uninstall.ps1` | Snapshots the 50 registry values, files and shortcuts the theme touches. Snapshot before installing, snapshot again after uninstalling, compare: an empty report means everything came back. It reads those places directly rather than following the backup's own list, so a value the backup forgot still shows up |
 
 **Building a release:** commit, then run `src\tools\build_release.ps1`.
 
