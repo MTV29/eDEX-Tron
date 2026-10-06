@@ -11,6 +11,7 @@
   ],
   "off": [],
   "bootsoundspeed": 1.6,
+  "font": "auto",
   "keyclickms": 43,
   "keyclickvolume": 75
 }

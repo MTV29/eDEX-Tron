@@ -15,8 +15,10 @@ eDEX-Tron.exe
 dock.txt
 theme.json
 
-# extracted from your own eDEX-UI install - not redistributable
-assets/fonts/
+# United Sans is a commercial House Industries typeface bundled inside
+# eDEX-UI; setup copies it out of *your* install and it is never shipped.
+# The Fira fonts beside it are OFL 1.1, so those do ship.
+assets/fonts/united_sans_*.woff2
 
 # rendered for your screen by setup / retheme
 assets/wallpaper/

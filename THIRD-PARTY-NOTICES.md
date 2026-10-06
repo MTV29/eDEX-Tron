@@ -30,7 +30,19 @@ case setup copies them out of *your* install:
 - **United Sans** — a commercial typeface by House Industries, bundled inside
   eDEX-UI. Without eDEX-UI, the theme uses Windows' own Bahnschrift and
   Consolas instead.
-- **Fira Mono** (as bundled by eDEX-UI) — SIL Open Font License 1.1.
+
+## Fonts shipped with the project
+
+In `assets\fonts\`, with their licences beside them. Both are under the SIL
+Open Font License 1.1, which permits redistribution, so unlike United Sans
+these do not need an eDEX-UI install.
+
+- **Fira Mono** — digitized data copyright Mozilla Foundation and Telefonica
+  S.A.; the copy here is the Nerd Font patched build eDEX-UI bundles, which
+  declares itself `FuraMono NF`. Licence: `LICENSE-FiraMono.txt`.
+- **Fira Code** — copyright The Fira Code Project Authors
+  ([github.com/tonsky/FiraCode](https://github.com/tonsky/FiraCode)), Fira Mono
+  with programming ligatures. Licence: `LICENSE-FiraCode.txt`.
 
 ## Boot audio
 

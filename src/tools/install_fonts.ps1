@@ -11,13 +11,25 @@ Add-Type -Namespace Win32 -Name Fonts -MemberDefinition @'
 [DllImport("gdi32.dll")] public static extern bool RemoveFontResourceW(string lpFilename);
 '@
 
-# Map file -> the family name Windows should register it under
+# Map file -> the name Windows registers it under. These are the families the
+# files actually declare (see build/ttf/families.json, written by woff2ttf.py);
+# the previous list was guessed and three of the four names were wrong.
 $families = @{
-  'united_sans_medium.ttf' = 'United Sans Reg Medium (TrueType)'
-  'united_sans_light.ttf'  = 'UnitedSansReg-Light (TrueType)'
-  'fira_mono.ttf'          = 'Fira Mono (TrueType)'
-  'fira_code.ttf'          = 'Fira Code Regular (TrueType)'
+  'united_sans_medium.ttf' = 'United Sans Rg Md (TrueType)'
+  'united_sans_light.ttf'  = 'United Sans Rg Lt (TrueType)'
+  'fira_mono.ttf'          = 'FuraMono NF (TrueType)'
+  'fira_code.ttf'          = 'Fira Code (TrueType)'
 }
+
+# What earlier versions registered. Only ever removed, never installed: a
+# machine set up before the names were corrected has entries under these, and
+# uninstall has to clear those too or it leaves fonts behind.
+$legacyNames = @(
+  'United Sans Reg Medium (TrueType)'
+  'UnitedSansReg-Light (TrueType)'
+  'Fira Mono (TrueType)'
+  'Fira Code Regular (TrueType)'
+)
 
 # Which fonts to work on. Installing needs the source files, so a missing
 # source directory means there is nothing to do -- it is empty whenever the
@@ -35,6 +47,17 @@ if ($Uninstall) {
     foreach ($entry in $families.GetEnumerator()) { $wanted[$entry.Key] = $entry.Value }
     foreach ($f in $sourceFiles) {
         if (-not $wanted.Contains($f.Name)) { $wanted[$f.Name] = "$($f.BaseName) (TrueType)" }
+    }
+    # Registry entries from before the family names were corrected. The file on
+    # disk is keyed by the registry value, so read it back rather than guessing.
+    foreach ($name in $legacyNames) {
+        $prop = Get-ItemProperty -Path $regKey -Name $name -ErrorAction SilentlyContinue
+        if ($null -eq $prop) { continue }
+        $file = [string]$prop.$name
+        if ($file) { [Win32.Fonts]::RemoveFontResourceW($file) | Out-Null }
+        Remove-ItemProperty -Path $regKey -Name $name -ErrorAction SilentlyContinue
+        if ($file -and (Test-Path $file)) { Remove-Item $file -ErrorAction SilentlyContinue }
+        "removed  $name (legacy name)"
     }
     foreach ($entry in $wanted.GetEnumerator()) {
         $target = Join-Path $fontDir $entry.Key

@@ -30,6 +30,9 @@ param(
     [string]$IconColor,
     [ValidateSet('on', 'off')][string]$Grid,
     [string]$Folder,
+    # Which typeface set the HUD uses. 'unitedsans' needs eDEX-UI installed
+    # for its commercial typeface; 'fira' ships with the project.
+    [ValidateSet('auto', 'unitedsans', 'fira', 'windows')][string]$Font,
     # Comma-separated, or 'none' to clear. Unset means "leave alone".
     [string]$Panels,
     [string]$Off,
@@ -83,6 +86,18 @@ function Split-List($text) {
     @($text -split ',' | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ })
 }
 
+# Which font sets this machine can actually render. 'unitedsans' needs the
+# commercial typeface, which only bootstrap_assets.ps1 can produce and only
+# when eDEX-UI is installed; without it the set silently falls back, so the
+# dialog greys it out instead of offering a choice that does nothing.
+function Get-AvailableFonts {
+    $ttf = Join-Path $Root 'build\ttf'
+    $sets = @('auto', 'windows')
+    if (Test-Path (Join-Path $ttf 'united_sans_medium.ttf')) { $sets += 'unitedsans' }
+    if (Test-Path (Join-Path $ttf 'fira_mono.ttf')) { $sets += 'fira' }
+    ($sets | Sort-Object) -join ','
+}
+
 function Test-Autostart {
     Test-Path (Join-Path ([Environment]::GetFolderPath('Startup')) 'eDEX-Tron Theme.lnk')
 }
@@ -107,6 +122,9 @@ if ($Get) {
     "grid=$(if ($cfg.grid) { 'on' } else { 'off' })"
     "folder=$([Environment]::ExpandEnvironmentVariables($folderPath))"
     "folderraw=$folderPath"
+    "font=$(if ($cfg.font) { ([string]$cfg.font).ToLower() } else { 'auto' })"
+    "fonts=auto,unitedsans,fira,windows"
+    "fontavailable=$(Get-AvailableFonts)"
     "panels=$(($panelList | ForEach-Object { $_.ToLower() }) -join ',')"
     "off=$((@($cfg.off) | Where-Object { $_ } | ForEach-Object { $_.ToLower() }) -join ',')"
     "noroom=$($noRoom -join ',')"
@@ -137,6 +155,10 @@ if ($Folder) {
     $expanded = [Environment]::ExpandEnvironmentVariables($Folder)
     if (-not (Test-Path $expanded)) { throw "folder not found: $expanded" }
     Set-Key $cfg 'folder' $Folder
+    $layoutChanged = $true
+}
+if ($Font) {
+    Set-Key $cfg 'font' $Font.ToLower()
     $layoutChanged = $true
 }
 if ($PSBoundParameters.ContainsKey('Panels')) {

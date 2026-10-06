@@ -152,8 +152,40 @@ for ($i = 0; $i -lt 40; $i++) {
 Start-Sleep -Milliseconds 400
 
 New-Item -ItemType Directory -Force -Path $skinRoot | Out-Null
-if (Test-Path $live) { Remove-Item $live -Recurse -Force }
-Copy-Item $srcSkins $skinRoot -Recurse -Force
+
+# Stopping Rainmeter is not enough. Its RunCommand measures spawn PowerShell
+# for ports.ps1 and gpu.ps1, and those children outlive the process that
+# started them, still holding a handle on the skin folder. The delete below
+# then removes the panels it can and leaves the ones it cannot, and the copy
+# dies partway through -- so the HUD comes back with half its panels missing
+# and the only clue is a FATAL in the log.
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine -like "*Rainmeter*Skins*eDEX-Tron*" } |
+    ForEach-Object {
+        Write-Host "  stopping leftover skin script (pid $($_.ProcessId))"
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
+# A handle can still be closing, so give the copy a few goes before failing --
+# and if it does fail, say so loudly, because a half-deployed skin folder is a
+# visibly broken desktop rather than a quiet degradation.
+$deployed = $false
+for ($attempt = 1; $attempt -le 4; $attempt++) {
+    try {
+        if (Test-Path $live) { Remove-Item $live -Recurse -Force -ErrorAction Stop }
+        Copy-Item $srcSkins $skinRoot -Recurse -Force -ErrorAction Stop
+        $deployed = $true
+        break
+    } catch {
+        if ($attempt -eq 4) {
+            throw ("could not replace $live after $attempt attempts: $($_.Exception.Message)`n" +
+                   'Something still holds the skin folder open. Close Rainmeter and re-run.')
+        }
+        Write-Host "  skin folder busy, retrying ($attempt/4)"
+        Start-Sleep -Milliseconds 600
+    }
+}
+if (-not $deployed) { throw "skins were not deployed to $live" }
 
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\Rainmeter" | Out-Null
 $ini = Join-Path $Root 'build\Rainmeter.ini'

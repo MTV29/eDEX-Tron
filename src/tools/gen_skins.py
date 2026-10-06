@@ -839,24 +839,70 @@ def terminal(tw, th):
 
 
 # ------------------------------------------------------------------- BUILD ---
-def pick_fonts():
-    """eDEX-UI's own fonts when setup could extract them, else Windows' own.
+# The font sets you can choose between, as theme.json "font".
+#
+# Each entry names TTFs in build/ttf, and the family name actually written into
+# Variables.inc is read out of build/ttf/families.json -- never written here.
+# A FontFace that names a font Windows cannot find is not an error: GDI hands
+# back Microsoft Sans Serif and the HUD renders in the wrong typeface while
+# looking like it worked. That is exactly what had been happening.
+FONT_SETS = {
+    # eDEX-UI's own look. United Sans is commercial and is not shipped, so this
+    # needs an eDEX-UI install for bootstrap_assets.ps1 to copy out of.
+    'unitedsans': {'main': 'united_sans_medium.ttf',
+                   'light': 'united_sans_light.ttf',
+                   'mono': 'fira_mono.ttf'},
+    # Fira throughout. Both files ship with the project (OFL 1.1), so this is
+    # the one set that does not need eDEX-UI installed and still is not
+    # Windows' own. Everything is monospace, including the captions.
+    'fira': {'main': 'fira_code.ttf',
+             'light': 'fira_mono.ttf',
+             'mono': 'fira_mono.ttf'},
+}
+# No files needed: these ship with Windows 10/11.
+WINDOWS_FONTS = {'main': 'Bahnschrift', 'light': 'Bahnschrift Light', 'mono': 'Consolas'}
 
-    United Sans is a commercial typeface, so the project never ships it; it is
-    only used when the person has eDEX-UI installed (bootstrap_assets.ps1
-    copies it out of their copy). Bahnschrift and Consolas ship with Windows
-    10/11 and have a similar technical look.
-    """
-    ttf = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+
+def ttf_dir():
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__)))), 'build', 'ttf')
-    if os.path.exists(os.path.join(ttf, 'united_sans_medium.ttf')):
-        return {'main': 'United Sans Reg Medium', 'light': 'UnitedSansReg-Light',
-                'mono': 'Fira Mono' if os.path.exists(os.path.join(ttf, 'fira_mono.ttf')) else 'Consolas'}
-    return {'main': 'Bahnschrift', 'light': 'Bahnschrift Light', 'mono': 'Consolas'}
 
 
-def variables(th, desktop, folder):
-    fonts = pick_fonts()
+def pick_fonts(choice='auto'):
+    """The three family names to write into Variables.inc.
+
+    `choice` is theme.json "font": a key of FONT_SETS, 'windows', or 'auto' to
+    take the best set whose files are actually present.
+    """
+    ttf = ttf_dir()
+    try:
+        with open(os.path.join(ttf, 'families.json'), encoding='utf-8') as f:
+            families = json.load(f)
+    except (OSError, ValueError):
+        families = {}
+
+    def available(name):
+        """The family name for this file, if the file is there and declares one."""
+        return families.get(name) if os.path.exists(os.path.join(ttf, name)) else None
+
+    def resolve(spec):
+        got = {slot: available(fn) for slot, fn in spec.items()}
+        return got if all(got.values()) else None
+
+    if choice in FONT_SETS:
+        return resolve(FONT_SETS[choice]) or WINDOWS_FONTS
+    if choice == 'windows':
+        return WINDOWS_FONTS
+    # auto: eDEX-UI's typeface if it is here, then Fira, then Windows' own.
+    for key in ('unitedsans', 'fira'):
+        got = resolve(FONT_SETS[key])
+        if got:
+            return got
+    return WINDOWS_FONTS
+
+
+def variables(th, desktop, folder, font='auto'):
+    fonts = pick_fonts(font)
     return textwrap.dedent(f"""
     [Variables]
     ; Palette lifted verbatim from eDEX-UI's tron.json -- edit here to retheme
@@ -896,6 +942,10 @@ def main():
                    help='comma-separated drive letters for the Disk panel')
     p.add_argument('--gpu-name', default='',
                    help='short card name, shown in the GPU panel caption')
+    p.add_argument('--font', default='',
+                   help='font set: auto, windows, or one of '
+                        + ', '.join(sorted(FONT_SETS))
+                        + ' (default: the theme.json font setting, else auto)')
     p.add_argument('--config', default=os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'theme.json'))
     a = p.parse_args()
@@ -904,6 +954,7 @@ def main():
     W = a.width
 
     th = load_theme(a.theme)
+    font = a.font.strip().lower()
     try:
         with open(a.config, encoding='utf-8-sig') as f:
             cfg = json.load(f)
@@ -911,11 +962,19 @@ def main():
             th['accent'] = ','.join(str(v) for v in hex2rgb(cfg['accent']))
         if cfg.get('background'):
             th['bg'] = ','.join(str(v) for v in hex2rgb(cfg['background']))
+        if not font and cfg.get('font'):
+            font = str(cfg['font']).strip().lower()
     except OSError:
         pass
+    if not font:
+        font = 'auto'
     os.makedirs(os.path.join(a.out, '@Resources'), exist_ok=True)
     with open(os.path.join(a.out, '@Resources', 'Variables.inc'), 'w') as f:
-        f.write(variables(th, a.desktop, a.folder) + '\n')
+        f.write(variables(th, a.desktop, a.folder, font) + '\n')
+
+    chosen = pick_fonts(font)
+    print('{:12} {}: {} / {} / {}'.format('fonts', font,
+          chosen['main'], chosen['light'], chosen['mono']))
 
     skins = {
         'Clock': clock(),

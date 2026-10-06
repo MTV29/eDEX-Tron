@@ -181,6 +181,22 @@ To tell a new press from Windows repeating a key you are holding, the hook reads
 which key was pressed. It is used as an index into an is-this-key-down table and
 nothing else: no key is recorded, counted or passed on.
 
+**Typeface** — four sets, chosen in Settings or as `font` in `theme.json`:
+
+| `font` | What you get |
+| --- | --- |
+| `auto` | the best set present: United Sans, else Fira, else Windows' own |
+| `unitedsans` | eDEX-UI's own look. Needs eDEX-UI installed to copy out of |
+| `fira` | Fira throughout, captions included. Ships with the project |
+| `windows` | Bahnschrift and Consolas, already on every Windows 10/11 |
+
+Settings only offers the sets whose files are actually on the machine, because
+a missing font is not an error anywhere: Windows hands back Microsoft Sans
+Serif and the HUD renders in the wrong typeface while looking like it worked.
+For the same reason the family names are never written by hand — `woff2ttf.py`
+reads each file's own name into `build/ttf/families.json` and the skins are
+generated from that.
+
 **Colours** — all colours live in `theme.json`. Settings has a colour
 picker; from a terminal:
 
@@ -220,8 +236,8 @@ remove them with `winget uninstall` if you like.
 - The installer is not code-signed yet.
 - The GPU panel reports a temperature only where `nvidia-smi` exists; AMD and
   Intel expose load and memory to Windows but not temperature.
-- Without eDEX-UI installed, text uses Windows' Bahnschrift rather than
-  eDEX-UI's United Sans (which can't be redistributed).
+- Without eDEX-UI installed, eDEX-UI's own United Sans is unavailable (it is
+  commercial and can't be redistributed); the Fira and Bahnschrift sets are.
 
 ## Licence
 

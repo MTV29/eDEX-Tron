@@ -36,6 +36,7 @@ class SettingsForm : Form
 
     // folder + behaviour
     TextBox folderBox;
+    ComboBox fontBox;
     CheckBox keyClickBox, hotkeysBox, bootBox, snapBox, altTabBox, autostartBox;
 
     Button applyButton, closeButton, dockButton;
@@ -208,6 +209,21 @@ class SettingsForm : Form
     // the newer one the moment Apply was pressed.
     readonly HashSet<string> touched = new HashSet<string>();
 
+    List<string> fontNames = new List<string>();
+
+    /// <summary>What to call each font set in the dropdown.</summary>
+    static string FontLabel(string set)
+    {
+        switch (set)
+        {
+            case "auto":       return "Automatic (best available)";
+            case "unitedsans": return "United Sans - eDEX-UI's own";
+            case "fira":       return "Fira - ships with eDEX-Tron";
+            case "windows":    return "Bahnschrift - comes with Windows";
+            default:           return set;
+        }
+    }
+
     CheckBox Check(string text, bool value, int x, int y, string tip = null,
                    string field = null)
     {
@@ -343,6 +359,33 @@ class SettingsForm : Form
         });
         y += 40;
 
+        Heading("Typeface", y); y += 28;
+        fontBox = new ComboBox();
+        fontBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        fontBox.FlatStyle = FlatStyle.Flat;
+        fontBox.Location = new Point(20, y);
+        fontBox.Size = new Size(240, 22);
+        fontBox.BackColor = Color.FromArgb(16, 20, 28);
+        fontBox.ForeColor = accent;
+        // Only the sets whose files are actually on this machine.
+        // Offering eDEX-UI's typeface without eDEX-UI installed is
+        // offering a choice that silently does nothing.
+        var haveFonts = List("fontavailable");
+        if (haveFonts.Count == 0) haveFonts = List("fonts");
+        string fontNow = Get("font");
+        if (fontNow.Length == 0) fontNow = "auto";
+        foreach (string set in haveFonts) fontBox.Items.Add(FontLabel(set));
+        fontBox.SelectedIndex = Math.Max(0, haveFonts.IndexOf(fontNow));
+        fontBox.SelectedIndexChanged += (s2, a2) => touched.Add("font");
+        tips.SetToolTip(fontBox, "Which typeface the panels and the shell use");
+        Controls.Add(fontBox);
+        fontNames = haveFonts;
+        Note(haveFonts.Contains("unitedsans")
+             ? "Fira ships with eDEX-Tron; United Sans comes from your eDEX-UI install."
+             : "Install eDEX-UI and re-run setup to add its own United Sans.",
+             276, y + 3);
+        y += 36;
+
         Heading("Behaviour", y); y += 28;
         keyClickBox = Check("Audible key clicks", On("keyclick", false), 20, y,
                             "A click on every keystroke, the way eDEX-UI has one", "keyclick");
@@ -418,6 +461,11 @@ class SettingsForm : Form
 
         if (changed("folder") && folderBox.Text.Trim() != Get("folderraw"))
             args.Append(" -Folder \"" + folderBox.Text.Trim() + "\"");
+
+        if (changed("font") && fontBox.SelectedIndex >= 0
+            && fontBox.SelectedIndex < fontNames.Count
+            && fontNames[fontBox.SelectedIndex] != Get("font"))
+            args.Append(" -Font " + fontNames[fontBox.SelectedIndex]);
 
         if (changed("keyclick") && keyClickBox.Checked != On("keyclick", false)) args.Append(Switch("KeyClick", keyClickBox.Checked));
         if (changed("hotkeys") && hotkeysBox.Checked != On("hotkeys", true)) args.Append(Switch("Hotkeys", hotkeysBox.Checked));
