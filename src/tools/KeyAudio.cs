@@ -100,6 +100,15 @@ static class KeyAudio
             double sourceMs = pcm.Length / (double)channels / rate * 1000.0;
             double baseSpeed = targetMs > 1.0 ? sourceMs / targetMs : 1.0;
 
+            // How loud the clicks are, as a percentage, and only the clicks:
+            // the boot sound and everything else keep their own levels. Baked
+            // into the variants rather than set on the device, because the
+            // device is the system's -- turning it down would turn down
+            // whatever else happened to be playing through it.
+            double volume = EdexTron.Number("keyclickvolume", 100.0) / 100.0;
+            if (volume < 0.0) volume = 0.0;
+            if (volume > 1.0) volume = 1.0;
+
             for (int v = 0; v < VARIANTS; v++)
             {
                 // Either side of that: a little slower and quieter through a
@@ -108,7 +117,7 @@ static class KeyAudio
                 int targetLen = (int)(pcm.Length / channels / baseSpeed
                                       * (1.0 + spread * 0.05));
                 short[] shaped = Reshape(pcm, targetLen,
-                                         1.0 - Math.Abs(spread) * 0.18, rate);
+                                         (1.0 - Math.Abs(spread) * 0.18) * volume, rate);
                 shapedVariants.Add(shaped);
                 shapedRate = rate;
                 byte[] raw = new byte[shaped.Length * 2];

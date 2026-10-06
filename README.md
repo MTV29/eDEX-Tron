@@ -151,10 +151,16 @@ typeface, so `assets\sounds\` is left out of the repository.
 **Key clicks** — an optional click on every keystroke, off by default. The
 audio device is opened once and kept open, and each press is layered over
 whatever is still sounding rather than cutting it off, using six variants of the
-sample at slightly different pitch and level — so typing sounds like typing
-rather than one sample on repeat. Holding a key is one click, not thirty a
-second. `keyclickms` in `theme.json` sets how long a click lasts (43ms by
-default); the variants spread five per cent either side of it.
+sample at slightly different length and level — so typing sounds like typing
+rather than one sample on repeat. The variants are time-stretched rather than
+resampled, so they stay the same keyboard instead of becoming six of them.
+Holding a key is one click, not thirty a second.
+
+Two numbers in `theme.json` tune it: `keyclickms` is how long a click lasts
+(43ms by default, with the variants spread five per cent either side), and
+`keyclickvolume` is how loud, as a percentage (75 by default). The level is
+baked into the samples rather than set on the audio device, so turning the
+clicks down leaves everything else playing at the volume you chose.
 
 The click that ships is one we render ourselves (`src\tools\gen_sounds.py`),
 because eDEX-UI's own sound set cannot be redistributed. To use your own — a
