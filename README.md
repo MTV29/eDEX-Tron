@@ -141,12 +141,13 @@ read off the machine as it scrolls: the real processor, memory, drives, display
 adapter, network links, the services Windows actually has running, and how long
 you have been up. Any key skips it; turn it off in Settings.
 
-It will play a sound over it if you give it one: drop a `boot.mp3` or `boot.wav`
-into `assets\sounds\`, or point `bootsound` in `theme.json` anywhere you like.
-`bootsoundspeed` plays it faster than recorded (1.6 by default), and it fades out
-when the screen closes rather than cutting. Nothing is shipped with the project:
-a boot animation from a game is no more ours to redistribute than eDEX-UI's own
-typeface, so `assets\sounds\` is left out of the repository.
+A sound plays over it: Watch Dogs' boot sequence, which is what the screen was
+built around. `bootsoundspeed` plays it faster than recorded (1.6 by default),
+and it fades out when the screen closes rather than cutting. To use something
+else, drop a `boot.mp3` or `boot.wav` into `assets\sounds\` or point `bootsound`
+in `theme.json` anywhere you like. That audio is Ubisoft's, credited in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and not ours to license on;
+delete the file and the screen runs silently.
 
 **Key clicks** — an optional click on every keystroke, off by default. The
 audio device is opened once and kept open, and each press is layered over
@@ -162,10 +163,10 @@ Two numbers in `theme.json` tune it: `keyclickms` is how long a click lasts
 baked into the samples rather than set on the audio device, so turning the
 clicks down leaves everything else playing at the volume you chose.
 
-The click that ships is one we render ourselves (`src\tools\gen_sounds.py`),
-because eDEX-UI's own sound set cannot be redistributed. To use your own — a
-recording of your keyboard, or one of eDEX-UI's effects if you have it installed
-— put it at `assets\sounds\key.wav`, which the launcher prefers:
+The click that ships is a recording of a real keyboard, at
+`assets\sounds\key.wav`, which the launcher prefers. A synthesised one sits at
+`assets\sounds\gen\key.wav` (`src\tools\gen_sounds.py`) as a fallback. To use a
+recording of your own keyboard instead, overwrite `key.wav`:
 
 ```bash
 python src\tools\sample_click.py <a recording of typing> --report

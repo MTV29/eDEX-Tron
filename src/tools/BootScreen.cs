@@ -360,10 +360,11 @@ static class BootScreen
             catch { }
         }
 
-        // Your own recording if you have one, otherwise the one we render.
-        // A boot animation ripped from a game is not ours to ship, so it is
-        // only ever read from assets\sounds\ -- which the repository ignores,
-        // the same arrangement as eDEX-UI's own typeface.
+        // Your own file if `bootsound` names one, otherwise whatever is in
+        // assets\sounds\. Shipped with Watch Dogs' boot sequence there, which
+        // belongs to Ubisoft and is credited in THIRD-PARTY-NOTICES.md; the
+        // screen runs silently if it is missing, so deleting it is a fine
+        // answer for anyone who would rather not have it.
         static string BootSoundFile()
         {
             var tried = new List<string>();

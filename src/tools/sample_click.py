@@ -8,8 +8,8 @@ clean press, trimmed and levelled before it is any use.
     python src\\tools\\sample_click.py "Recording.mp3" --index 2 --play
 
 Writes assets/sounds/key.wav, which the launcher prefers over the synthesised
-assets/sounds/gen/key.wav. That folder is outside the repository: a recording
-is the person's own, and nothing in assets\\sounds\\ is ever shipped.
+assets/sounds/gen/key.wav. Overwrites the recording that ships, so keep a copy
+if you want it back.
 
 Needs miniaudio for the decode (pip install --user miniaudio); it is a
 development tool, not something the theme needs at runtime.

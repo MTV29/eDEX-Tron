@@ -17,10 +17,6 @@ theme.json
 
 # extracted from your own eDEX-UI install - not redistributable
 assets/fonts/
-assets/sounds/*
-
-# except the key click, which we render ourselves and so can ship
-!assets/sounds/gen/
 
 # rendered for your screen by setup / retheme
 assets/wallpaper/

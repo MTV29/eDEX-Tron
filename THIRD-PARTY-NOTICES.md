@@ -12,6 +12,12 @@ What this project takes from eDEX-UI:
 - the visual language of its panels — caption rules with end ticks, the grid
   background, the module layout — reproduced from eDEX-UI's stylesheets
 - the idea and arrangement of the home screen
+- **the sound effects** in `assets\sounds\` — `granted.wav`,
+  `keyboard.wav`, `stdin.wav` and the rest. They were composed for eDEX-UI
+  v2.1.x and above by **IceWolf**
+  ([soundcloud.com/iamicewolf](https://soundcloud.com/iamicewolf)) and are
+  redistributed here under eDEX-UI's GPL-3.0. Please keep the credit if you
+  fork this; he makes really cool stuff, go and listen to it.
 
 eDEX-Tron is not affiliated with or endorsed by the eDEX-UI project. eDEX-UI is
 archived upstream; please credit it when sharing this work.
@@ -25,7 +31,15 @@ case setup copies them out of *your* install:
   eDEX-UI. Without eDEX-UI, the theme uses Windows' own Bahnschrift and
   Consolas instead.
 - **Fira Mono** (as bundled by eDEX-UI) — SIL Open Font License 1.1.
-- **eDEX-UI sound effects** — part of eDEX-UI.
+
+## Boot audio
+
+`assets\sounds\boot.mp3` is the boot sequence from **Watch Dogs**, a game by
+**Ubisoft**, who own it. It is included here because it is what the boot screen
+was built around, and it is credited rather than passed off as ours; no claim of
+ownership or of permission is made, and Ubisoft are welcome to ask for it to be
+removed. The boot screen does not need it: `bootsound` in `theme.json` points
+at any file you like, and with none it plays silently.
 
 ## Installed separately by setup
 

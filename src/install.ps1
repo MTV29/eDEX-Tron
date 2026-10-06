@@ -232,7 +232,8 @@ function Install-Assets {
     $pairs = @(
         @{ From = 'assets\wallpaper'; Filter = '*.png'; To = "$InstallTo\wallpaper" },
         @{ From = 'assets\wallpaper'; Filter = '*.jpg'; To = "$InstallTo\wallpaper" },
-        @{ From = 'assets\sounds';    Filter = '*.wav'; To = "$InstallTo\sounds" }
+        @{ From = 'assets\sounds';    Filter = '*.wav'; To = "$InstallTo\sounds" },
+        @{ From = 'assets\sounds';    Filter = '*.mp3'; To = "$InstallTo\sounds" }
     )
     $skipped = 0
     foreach ($p in $pairs) {
