@@ -298,6 +298,31 @@ function Set-Background {
     & (Join-Path $PSScriptRoot 'tools\set_wallpaper.ps1') -Path $wp.FullName -Style Fill |
         ForEach-Object { Write-Ok $_ }
     Write-Ok "Wallpaper -> $($wp.Name)"
+    # One image per display where there is more than one. Windows takes a
+    # single wallpaper and a single fit mode, so a second monitor of a
+    # different shape gets the first one's picture stretched onto it.
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        if ([System.Windows.Forms.Screen]::AllScreens.Count -gt 1) {
+            & (Join-Path $PSScriptRoot 'tools\set_wallpapers.ps1') | ForEach-Object { Write-Ok $_ }
+        }
+    } catch { Write-Warn2 "per-monitor wallpaper skipped: $($_.Exception.Message)" }
+
+}
+
+# Changing the wallpaper and accent makes Windows rewrite the active
+# Custom.theme, and the one it writes has an empty [Control Panel\Desktop]
+# section -- no font smoothing lines at all. Applying that theme afterwards
+# leaves FontSmoothing and UserPreferencesMask *absent* rather than off, and
+# text renders unsmoothed. It is easy to see and very hard to attribute, so
+# assert it back at the end of every install rather than hope.
+function Restore-FontSmoothing {
+    Write-Step 'Checking font smoothing'
+    try {
+        & (Join-Path $PSScriptRoot 'tools\fix_font_smoothing.ps1') |
+            ForEach-Object { Write-Ok $_ }
+    }
+    catch { Write-Warn2 "font smoothing check failed: $($_.Exception.Message)" }
 }
 
 function Install-ThemeFile {
@@ -573,6 +598,11 @@ Install-Rainmeter
 Start-Sleep -Seconds 5
 Set-Appearance
 Broadcast-SettingChange
+
+# After everything else, for the same reason the accent is: the theme
+# Explorer re-applies on its way back up is what clears these, so asserting
+# them any earlier loses the same race.
+Restore-FontSmoothing
 
 Register-AppEntry
 

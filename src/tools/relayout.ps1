@@ -207,4 +207,13 @@ if ((Test-Path $rmExe) -and ($running -or -not $env:EDEX_NO_START)) {
     $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "`"$rmExe`"" }
     if ($r.ReturnValue -ne 0) { Start-Process $rmExe }
 }
+# A display change is also when the wallpapers stop matching: relayout runs
+# on WM_DISPLAYCHANGE, so this is where a newly plugged-in monitor gets its
+# own picture rather than the primary's stretched to fit.
+try {
+    if ([System.Windows.Forms.Screen]::AllScreens.Count -gt 1) {
+        & (Join-Path $tools 'set_wallpapers.ps1') | ForEach-Object { "  $_" }
+    }
+} catch { "  per-monitor wallpaper skipped: $($_.Exception.Message)" }
+
 "deployed -> $live"
