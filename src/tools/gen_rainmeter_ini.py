@@ -267,6 +267,9 @@ def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
     heights = dict(H)
     heights['Disk'] = DISK_BASE + DISK_ROW * max(1, drives)
     heights['Power'] = int(POWER_BASE + POWER_ROW * max(1, power_rows))
+    # Same mono rows as Power and Ports: the listed sensors plus the
+    # '+N more' line.
+    heights['Prtg'] = int(POWER_BASE + POWER_ROW * (PRTG_ROWS + 1))
     # The duplicate can be generated at a different size (gen_skins --scale),
     # so the planner has to measure the panels it is actually placing.
     if abs(scale - 1.0) > 1e-6:
@@ -319,6 +322,12 @@ def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
 # shell is one real console window and cannot be in two places at once, so
 # a second frame would sit there empty.
 DUPLICATE = LEFT_STACK + RIGHT_STACK + OPTIONAL + ('Dock', 'Desktop', 'Folder')
+
+# Panels that belong on a second display and nowhere else. The primary is
+# already full, and these are the ones you glance at rather than work from.
+# They are not in ORDER, so the primary's config never mentions them.
+SECOND_ONLY = ('Prtg',)
+PRTG_ROWS = 10               # gen_skins prtg(): sensors listed, plus a total
 
 ORDER = ['Clock', 'CpuInfo', 'NetStat', 'RamWatcher', 'ConnInfo', 'TopList',
          'Disk', 'Ports', 'Gpu', 'Power',
@@ -422,7 +431,8 @@ if __name__ == '__main__':
     p['second'] = {}
     p['second_root'] = a.second_root or (a.root + '-2')
     if a.second_w > 0 and a.second_h > 0:
-        wanted = [n for n in DUPLICATE if n not in p['hidden']]
+        wanted = ([n for n in DUPLICATE if n not in p['hidden']]
+                  + list(SECOND_ONLY))
         placed, dropped = plan_second(wanted, a.second_w, a.second_h,
                                       a.drive_count, a.power_rows, a.second_scale,
                                       {'Dock': (p['dock_cols'], p['dock_rows']),
