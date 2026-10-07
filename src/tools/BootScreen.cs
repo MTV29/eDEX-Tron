@@ -233,9 +233,48 @@ static class BootScreen
     }
 
     // --------------------------------------------------------------- screen ---
+    /// <summary>The boot screen on a display that is not the primary.
+    ///
+    /// A window and nothing else: it paints whatever the real Screen currently
+    /// holds, at its own size, and does not collect, time or sound anything.
+    /// Making it a second Screen would start a second gather thread, a second
+    /// timer and a second copy of the boot audio.
+    /// </summary>
+    class Mirror : Form
+    {
+        readonly Screen owner;
+
+        public Mirror(Screen owner, Rectangle bounds, Color back)
+        {
+            this.owner = owner;
+            Text = "eDEX-Tron boot (mirror)";
+            FormBorderStyle = FormBorderStyle.None;
+            // Bounds rather than Maximized: maximising puts it on whichever
+            // display Windows thinks it belongs to, which is the primary.
+            StartPosition = FormStartPosition.Manual;
+            Bounds = bounds;
+            TopMost = true;
+            ShowInTaskbar = false;
+            BackColor = back;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint
+                     | ControlStyles.OptimizedDoubleBuffer, true);
+            // Any key or click goes to the log window, which is what closes
+            // everything; a mirror closing on its own would leave the rest up.
+            KeyDown += (s, a) => { try { owner.Close(); } catch { } };
+            MouseDown += (s, a) => { try { owner.Close(); } catch { } };
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            try { owner.Draw(e.Graphics, ClientSize.Width, ClientSize.Height); }
+            catch { }
+        }
+    }
+
     class Screen : Form
     {
         readonly List<Line> lines = new List<Line>();
+        readonly List<Mirror> mirrors = new List<Mirror>();
         readonly Queue<Line> pending = new Queue<Line>();
         readonly Color accent, back;
         readonly string version;
@@ -291,6 +330,18 @@ static class BootScreen
             StartSound();
             KeyDown += (s, a) => Close();
             MouseDown += (s, a) => Close();
+
+            // One mirror per other display. They own nothing -- no timer, no
+            // log, no sound -- and paint this screen's state at their own size.
+            foreach (var scr in System.Windows.Forms.Screen.AllScreens)
+            {
+                if (scr.Primary) continue;
+                var m = new Mirror(this, scr.Bounds, back);
+                mirrors.Add(m);
+                m.Show();
+            }
+            // The log window is the one that takes the keyboard.
+            if (mirrors.Count > 0) { Activate(); BringToFront(); }
         }
 
         // The boot sound, if there is one. MediaPlayer rather than PlaySound
@@ -400,6 +451,26 @@ static class BootScreen
             catch { return false; }
         }
 
+        void RepaintMirrors()
+        {
+            for (int i = 0; i < mirrors.Count; i++)
+            {
+                try { mirrors[i].Invalidate(); } catch { }
+            }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            // The mirrors are not owned by the message loop, so closing the
+            // log window has to take them with it or they stay on screen.
+            for (int i = 0; i < mirrors.Count; i++)
+            {
+                try { mirrors[i].Close(); mirrors[i].Dispose(); } catch { }
+            }
+            mirrors.Clear();
+            base.OnFormClosed(e);
+        }
+
         void Step()
         {
             // Hold the log until the sound is actually playing, so the two
@@ -415,6 +486,7 @@ static class BootScreen
                 lines.Add(next);
                 while (lines.Count > MaxLines) lines.RemoveAt(0);
                 Invalidate();
+                RepaintMirrors();
                 return;
             }
 
@@ -428,6 +500,7 @@ static class BootScreen
                 lines.Add(new Line("OK", "eDEX-Tron HUD online"));
                 while (lines.Count > MaxLines) lines.RemoveAt(0);
                 Invalidate();
+                RepaintMirrors();
                 return;
             }
             // Hold the READY frame, but also give the boot sound long enough to
@@ -445,11 +518,20 @@ static class BootScreen
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var g = e.Graphics;
+            Draw(e.Graphics, ClientSize.Width, ClientSize.Height);
+        }
+
+        /// <summary>Paint the boot screen at a given size.
+        ///
+        /// Separate from OnPaint so the mirrors on other displays can draw the
+        /// same thing without owning any of it: there is one log, one timer and
+        /// one sound, and a second Screen would start a second of each.
+        /// </summary>
+        public void Draw(Graphics g, int w, int h)
+        {
             g.Clear(back);
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
-            int w = ClientSize.Width, h = ClientSize.Height;
             int split = (int)(w * 0.62);
             using (var dim = new SolidBrush(Color.FromArgb(110, accent)))
             using (var mid = new SolidBrush(Color.FromArgb(190, accent)))
