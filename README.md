@@ -284,7 +284,8 @@ remove them with `winget uninstall` if you like.
   displays: only the largest of the others is used.
 - A small screen cannot fit every optional panel at once; Settings says which
   one missed out and `status` repeats it.
-- The Windhawk taskbar styling is manual.
+- The taskbar's transparency is themed automatically through TranslucentTB.
+  The extra Windhawk accent lines are still a manual step.
 - The installer is not code-signed yet.
 - The GPU panel reports a temperature only where `nvidia-smi` exists; AMD and
   Intel expose load and memory to Windows but not temperature.

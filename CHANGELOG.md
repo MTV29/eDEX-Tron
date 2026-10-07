@@ -1,5 +1,91 @@
 # Changelog
 
+## 1.0.0 — 2026-10-07 (Windows)
+
+The release the "primary display only" line was waiting on. A second screen
+now gets the HUD too, the project ships its own sounds and typeface, and the
+install has been run from scratch on a clean machine rather than assumed.
+
+### Added
+
+- **A second display gets a duplicate of the HUD**, laid out for its own size
+  rather than the primary's coordinates repeated — the screens are rarely the
+  same shape. Drawn larger (the panels scale as a set: width, padding, type
+  sizes and row metrics together), inset from the left edge, and removed again
+  when the display goes away. The shell stays on the primary, being one real
+  console window that cannot be in two places.
+- **A wallpaper per monitor**, rendered at each one's exact pixel size.
+  Windows takes a single image and a single fit mode, which stretches a 16:9
+  picture onto a 21:9 screen; spanning assumes the displays tile into a
+  rectangle, which they often do not.
+- **The boot screen comes up on every display.** One window does the work and
+  the others mirror it, so there is one log, one timer and one sound however
+  many screens there are. Its text scales with each screen, with `bootscale`
+  deciding how much of the difference to apply.
+- **A POWER panel** — watts drawn, and the battery where there is one. Windows
+  exposes the wattage through plain performance counters with no driver and no
+  elevation: the ACPI power meter, and Intel RAPL, which Intel desktops have
+  too. Only the lines a machine can answer are printed; there is no honest
+  whole-system figure on a desktop without a kernel driver, so none is shown.
+- **Layout profiles** — a named set of panels, switched in one go. They hold
+  the panel choice and nothing else, so switching one is not a bigger surprise
+  than the name suggests.
+- **A PRTG panel** for sensors that are down, on a second display only, off
+  until you switch it on. Reads `runtime\prtg.json` for the server and an API
+  token, which never leaves that file.
+- **A speed test button** on Network Usage. It moves about 33MB, so it is on a
+  button and never on a timer.
+- **Audible key clicks**, off by default: the device is opened once and kept
+  open, presses layer over each other rather than cutting each other off, six
+  variants keep it from sounding like one sample on repeat, and a held key is
+  one keystroke rather than thirty a second. `keyclickms` and `keyclickvolume`
+  tune it.
+- **Sound over the boot screen**, with `boot demo` substituting a generic user,
+  host, address and service list so it can be recorded.
+- **A choice of typeface** — automatic, eDEX-UI's United Sans, Fira, or
+  Windows' own. Fira Mono and Fira Code now ship with the project (OFL 1.1), so
+  there is a non-Windows option without eDEX-UI installed.
+- **eDEX-UI's sound effects ship**, composed by IceWolf and redistributed under
+  eDEX-UI's GPL-3.0 with the credit that licence asks for.
+- **The taskbar is part of the theme.** Setup installed TranslucentTB and never
+  said what it should look like; it is now tinted from `theme.json`.
+- **A preview in the README** — the HUD and the boot screen, composited from
+  the theme's own windows rather than photographed off a desktop.
+- **`eDEX-Tron.exe dumpclicks`**, and `src\dev` tooling to capture the HUD,
+  the boot screen and build a GIF without picturing anyone's desktop.
+
+### Changed
+
+- **Network Usage** is two readouts rather than a pair of mirrored histograms,
+  which took 200 pixels of a column three other panels were queuing for.
+- **The project installs from wherever it is cloned**, not only from
+  `Documents\eDEX-Tron`.
+- **`status` and `repair` print to the terminal** when run from one, and still
+  show a dialog when launched from the dock. They reported through a dialog
+  only, which from a shell looked like the command had hung.
+
+### Fixed
+
+- Font smoothing could end up **absent** rather than off, leaving text
+  unsmoothed. Windows re-applies the active theme, and a theme whose
+  `[Control Panel\Desktop]` section does not mention those values clears
+  them; install now asserts them back at the very end.
+- `gen_icon.py` wrote to a path relative to the working directory, so setup
+  tried to write the icon into `C:\Windows\System32\assets`, failed, and
+  carried on with the bundled icon.
+- Uninstall left the second display's skins behind entirely — the folder on
+  disk and twelve entries in `Rainmeter.ini`, which `[eDEX-Tron\` did not match.
+- Uninstall could not remove the fonts if `build\ttf` was gone, and the font
+  family names it registered were guessed: three of four were wrong, so the
+  HUD silently rendered in Microsoft Sans Serif.
+- A panel the planner placed but that was missing from `ORDER` was never
+  written to the config: a place on screen, no entry telling Rainmeter to load
+  it, and no symptom beyond not appearing. There is now an assertion at import.
+- `ConvertTo-Json` defaults to depth 2, which flattened the nested `profiles`
+  into space-joined strings with no error anywhere.
+- The settings window wrote every setting on Apply, so one left open would
+  undo a change made elsewhere. It now writes only what was changed in it.
+
 ## 0.9.1 — 2026-10-05 (Windows)
 
 ### Added
