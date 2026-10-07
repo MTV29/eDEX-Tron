@@ -107,7 +107,14 @@ if ($video) {
 if (-not $gpuName) { $gpuName = 'gpu' }
 # Empty strings get dropped on their way to a native command in PowerShell 5.1,
 # which argparse then reports as a missing value -- so only pass what is set.
-$planArgs = @('--drive-count', $drives.Count)
+# How many lines the Power panel can actually fill here. A laptop answers
+# five (battery, time left, system, processor, card); a desktop has no
+# battery and usually no ACPI power meter, so it answers two or three and
+# should not reserve the rest as blank space.
+$powerRows = 3
+if (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) { $powerRows = 5 }
+
+$planArgs = @('--drive-count', $drives.Count, '--power-rows', $powerRows)
 if ($panels)    { $planArgs += @('--panels', ($panels -join ',')) }
 if ($offPanels) { $planArgs += @('--off', ($offPanels -join ',')) }
 

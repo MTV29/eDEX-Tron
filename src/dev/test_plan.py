@@ -30,10 +30,11 @@ SCREENS = [
 ]
 
 
-def rects(p, drives=1):
+def rects(p, drives=1, power_rows=5):
     """Every switched-on panel as (name, x, y, w, h) in logical pixels."""
     heights = dict(g.H)
     heights['Disk'] = g.DISK_BASE + g.DISK_ROW * max(1, drives)
+    heights['Power'] = int(g.POWER_BASE + g.POWER_ROW * max(1, power_rows))
     hidden = set(p['hidden'])
     out = []
     for name, (x, y) in p['positions'].items():

@@ -44,6 +44,8 @@ H = {
     'Ports': 121,
     'Gpu': 74,
     # Disk grows with the drive count; see DISK_BASE / DISK_ROW.
+    # Power grows with how many readings the machine can answer; see
+    # POWER_BASE / POWER_ROW.
 }
 GRID_CELL = 66               # gen_dock: icon 40 + gap 26
 GRID_ROW = 68                # gen_dock: icon 40 + label 28
@@ -55,13 +57,20 @@ MIN_TERM_H = 120 + TERM_CHROME   # the shell never gets squeezed below this
 # Optional panels, in the order they claim space: the last one listed is the
 # first to go when the screen cannot hold them all. Which ones are *wanted* is
 # theme.json "panels"; this decides which of those actually fit.
-OPTIONAL = ('Gpu', 'Disk', 'Ports')
+OPTIONAL = ('Gpu', 'Power', 'Disk', 'Ports')
 # The two fixed columns, top to bottom. Any of these can be switched off
 # (theme.json "off"), and the space it was using is given back to the rest.
 LEFT_STACK = ('Clock', 'CpuInfo')
 RIGHT_STACK = ('NetStat', 'RamWatcher', 'ConnInfo', 'TopList')
 DISK_BASE = 22               # gen_skins disk(): caption block
 DISK_ROW = 26                # gen_skins disk(): one drive's row
+# Power rows are the same mono lines the Gpu and Ports panels use, so these
+# two reproduce those exactly: 3 rows is 74 like Gpu, 5 rows is 121 like
+# Ports. A laptop answers five (battery, time left, system, cpu, gpu); a
+# desktop with no meter answers two or three, and should not reserve the
+# difference as blank space.
+POWER_BASE = 4
+POWER_ROW = 23.5
 
 INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'Folder', 'NetStat'}
 DOCK_SHARE = 0.60            # the dock may take this much of the bottom band
@@ -80,7 +89,7 @@ def clamp(v, lo, hi):
 
 
 def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
-         off=()):
+         off=(), power_rows=5):
     """Work out where every panel goes on a screen of this size.
 
     Planned from the bottom up, because the bottom is where your own content
@@ -100,6 +109,7 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
 
     heights = dict(H)
     heights['Disk'] = DISK_BASE + DISK_ROW * max(1, drives)
+    heights['Power'] = int(POWER_BASE + POWER_ROW * max(1, power_rows))
     off = set(off)
 
     def stack_h(names):
@@ -230,9 +240,16 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
     }
 
 
+# Every skin the config lists. A panel the planner positions but that is
+# missing here is simply never written out: it has a place on screen and no
+# entry telling Rainmeter to load it, and the only symptom is that it does
+# not appear. Keep this in step with OPTIONAL.
 ORDER = ['Clock', 'CpuInfo', 'NetStat', 'RamWatcher', 'ConnInfo', 'TopList',
-         'Disk', 'Ports', 'Gpu',
+         'Disk', 'Ports', 'Gpu', 'Power',
          'Terminal', 'Folder', 'Dock', 'Desktop']
+
+# Catch the next one at import rather than on someone's desktop.
+assert not set(OPTIONAL) - set(ORDER), ('optional panels missing from ORDER: ' + ', '.join(sorted(set(OPTIONAL) - set(ORDER))))
 
 
 def build_ini(p, skin_path, root, disable=()):
@@ -270,6 +287,9 @@ if __name__ == '__main__':
                          + ', '.join(n.lower() for n in OPTIONAL))
     ap.add_argument('--drive-count', type=int, default=1,
                     help='fixed drives the Disk panel lists')
+    ap.add_argument('--power-rows', type=int, default=5,
+                    help='readings the Power panel can fill: 5 on a laptop, '
+                         'fewer on a desktop with no battery')
     ap.add_argument('--off', default='',
                     help='side panels to switch off and reclaim the space of: '
                          + ', '.join(n.lower() for n in LEFT_STACK + RIGHT_STACK))
@@ -286,7 +306,7 @@ if __name__ == '__main__':
 
     p = plan(a.screen_w, a.work_h, a.dock_count, a.desk_count, a.folder_count,
              names(a.panels, OPTIONAL), a.drive_count,
-             names(a.off, LEFT_STACK + RIGHT_STACK))
+             names(a.off, LEFT_STACK + RIGHT_STACK), a.power_rows)
 
     if a.plan_out:
         os.makedirs(os.path.dirname(os.path.abspath(a.plan_out)), exist_ok=True)

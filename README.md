@@ -132,11 +132,28 @@ panel and every switch are all there, and it applies the change for you.
 Turn them off in Settings if they clash with something.
 
 **Extra panels** — **GPU** (load, memory and temperature: `nvidia-smi` where it
-exists, performance counters otherwise), **DISK** (free space per drive) and
-**PORTS** (what is listening, and which program holds it). Switch them on in
-Settings. A small screen may not have room for all three: one marked *no room*
-is switched on but could not fit, and turning one of the standard panels off
-gives it the space. Nothing is ever drawn on top of anything else.
+exists, performance counters otherwise), **POWER** (see below), **DISK** (free
+space per drive) and **PORTS** (what is listening, and which program holds it).
+Switch them on in Settings. A small screen may not have room for all four: one
+marked *no room* is switched on but could not fit, and turning one of the
+standard panels off gives it the space. Nothing is ever drawn on top of
+anything else.
+
+**Power** — what the machine is actually drawing, in watts. Windows will tell
+you without any driver or elevation if you know where to ask, and the panel
+prints only the lines your hardware can answer:
+
+| Row | Where it comes from |
+| --- | --- |
+| `BATT` / `LEFT` | `Win32_Battery` and `root\WMI BatteryStatus` — laptops only |
+| `SYS` | the ACPI power meter, or the battery's own discharge rate |
+| `CPU` | Intel RAPL, via the `Energy Meter` performance counters |
+| `GPU` | `nvidia-smi power.draw`, or RAPL's integrated-graphics domain |
+
+A desktop has no battery and usually no ACPI meter, so it shows processor and
+card and the panel is sized for three rows instead of five — there is no
+whole-system wattage to be had on a desktop without a kernel driver or a meter
+at the wall, and the panel says what it knows rather than inventing the rest.
 
 **Boot screen** — the theme opens with eDEX's startup log. Everything in it is
 read off the machine as it scrolls: the real processor, memory, drives, display
