@@ -88,7 +88,9 @@ Switching off stops the HUD, the taskbar transparency and the background tasks
 and brings your desktop icons back; your colours stay until you uninstall.
 
 `status` reports what is actually running, and says so if a panel you asked for
-had no room on this screen. **`repair`** is the one to reach for when something
+had no room on this screen. Run from a terminal it prints and exits, so it
+pipes and scripts like anything else; launched from the dock or a shortcut,
+where there is no terminal to print to, it shows the same text in a dialog. **`repair`** is the one to reach for when something
 looks wrong: it rebuilds the layout for whatever the screen is now, restarts
 anything that has died, puts the shell back in its frame and hides the desktop
 icons again.

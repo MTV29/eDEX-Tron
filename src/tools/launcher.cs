@@ -60,6 +60,8 @@ static class EdexTron
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextW(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("kernel32.dll")] static extern bool AttachConsole(int pid);
+    const int ATTACH_PARENT_PROCESS = -1;
     [DllImport("user32.dll")] static extern IntPtr SendMessageW(IntPtr h, uint msg, IntPtr wp, IntPtr lp);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
     [DllImport("user32.dll")] static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool repaint);
@@ -909,10 +911,47 @@ static class EdexTron
         catch { return ""; }
     }
 
+    // --------------------------------------------------------------- output ---
+    // True once we have borrowed the console of whoever launched us.
+    static bool haveConsole;
+
+    /// <summary>Borrow the calling terminal's console, if we were started from
+    /// one.
+    ///
+    /// The launcher is built /target:winexe so that double-clicking it does not
+    /// flash a console window. The cost is that a run from a terminal has no
+    /// console at all, which is why every command reported through a MessageBox
+    /// -- fine from the dock tile or a hotkey, useless from a shell, where the
+    /// dialog is often behind other windows and the command looks like it hung
+    /// until someone finds it and clicks OK.
+    /// </summary>
+    static void TryAttachConsole()
+    {
+        try
+        {
+            if (!AttachConsole(ATTACH_PARENT_PROCESS)) return;
+            // The runtime bound Console.Out to a null stream at startup, when
+            // there was no console; rebind it to the one we just attached to.
+            var stdout = new StreamWriter(Console.OpenStandardOutput());
+            stdout.AutoFlush = true;
+            Console.SetOut(stdout);
+            haveConsole = true;
+        }
+        catch { haveConsole = false; }
+    }
+
+    /// <summary>Say something, wherever the person can actually see it.</summary>
+    static void Report(string text, string title)
+    {
+        if (haveConsole) Console.WriteLine(text);
+        else MessageBox.Show(text, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     // ------------------------------------------------------------------ main ---
     [STAThread]
     static int Main(string[] argv)
     {
+        TryAttachConsole();
         SetProcessDPIAware();
         Application.EnableVisualStyles();
         string cmd = argv.Length > 0 ? argv[0].ToLowerInvariant().TrimStart('-', '/') : "toggle";
@@ -933,12 +972,10 @@ static class EdexTron
                 StartWatcher();
                 break;
             case "status":
-                MessageBox.Show(StatusText(), "eDEX-Tron",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Report(StatusText(), "eDEX-Tron");
                 break;
             case "repair":
-                MessageBox.Show(Repair(), "eDEX-Tron repair",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Report(Repair(), "eDEX-Tron repair");
                 break;
             case "relayout":
                 Relayout(true);
@@ -954,20 +991,19 @@ static class EdexTron
                 string why;
                 if (!KeyAudio.Start(KeySound, out why))
                 {
-                    MessageBox.Show("Could not prepare the clicks: " + why, "eDEX-Tron");
+                    Report("Could not prepare the clicks: " + why, "eDEX-Tron");
                     return 1;
                 }
                 int n = KeyAudio.Dump(where);
                 KeyAudio.Stop();
-                MessageBox.Show(n + " variants written to:" + Environment.NewLine + where,
-                                "eDEX-Tron");
+                Report(n + " variants written to:" + Environment.NewLine + where,
+                       "eDEX-Tron");
                 break;
             }
             default:
-                MessageBox.Show(
-                    "Usage: eDEX-Tron.exe "
-                    + "[start|stop|toggle|status|repair|settings|boot|relayout|watch]",
-                    "eDEX-Tron", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Report("Usage: eDEX-Tron.exe "
+                       + "[start|stop|toggle|status|repair|settings|boot|relayout|watch|dumpclicks]",
+                       "eDEX-Tron");
                 return 1;
         }
         return 0;
