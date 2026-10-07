@@ -843,7 +843,22 @@ def conninfo():
     """
     bar_x = PAD + 46
     bar_w = W - PAD * 2 - 46 - 76
-    out = [skin_header(), header('Network Usage', 'conninfo'), textwrap.dedent("""
+    # The right-hand caption runs a throughput test. It moves about 33MB, so
+    # it is on a button and never on a timer -- the live rates below are what
+    # this panel is for; the test is for when you want to know why they are low.
+    out = [skin_header(),
+           header('Network Usage', 'speed test', width=W,
+                  right_action='[!CommandMeasure MeasureSpeedtest "Run"]'),
+           textwrap.dedent("""
+    [MeasureSpeedtest]
+    Measure=Plugin
+    Plugin=RunCommand
+    Program=powershell
+    Parameter=-NoProfile -ExecutionPolicy Bypass -File "#@#speedtest.ps1"
+    OutputType=ANSI
+    State=Hide
+    FinishAction=[!UpdateMeter MeterSpeedtest][!Redraw]
+
     [MeasureDown]
     Measure=NetIn
     Interface=Best
@@ -897,6 +912,23 @@ def conninfo():
         AntiAlias=1
         Text=%1B/s
         """).strip())
+    # Blank until the button is pressed. The result lives in the meter rather
+    # than a file: it is a reading from a moment, not a setting, and showing
+    # yesterday's number after a reload would be worse than showing none.
+    out.append(textwrap.dedent(f"""
+    [MeterSpeedtest]
+    Meter=String
+    MeasureName=MeasureSpeedtest
+    X={PAD}
+    Y=10R
+    W={W - PAD * 2}
+    FontFace=#FontMono#
+    FontSize={FS_MONO}
+    FontColor=#Accent#,{A_DIM}
+    AntiAlias=1
+    ClipString=1
+    Text=%1
+    """).strip())
     return '\n\n'.join(out)
 
 # ---------------------------------------------------------------- TERMINAL ---

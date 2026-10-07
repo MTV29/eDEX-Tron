@@ -40,7 +40,7 @@ H = {
     'NetStat': 191,
     'RamWatcher': 152,
     'TopList': 135,
-    'ConnInfo': 76,
+    'ConnInfo': 96,   # two rates plus the speed-test result line
     'Ports': 121,
     'Gpu': 74,
     # Disk grows with the drive count; see DISK_BASE / DISK_ROW.
@@ -72,7 +72,7 @@ DISK_ROW = 26                # gen_skins disk(): one drive's row
 POWER_BASE = 4
 POWER_ROW = 23.5
 
-INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'Folder', 'NetStat', 'Prtg'}
+INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'Folder', 'NetStat', 'Prtg', 'ConnInfo'}
 DOCK_SHARE = 0.60            # the dock may take this much of the bottom band
 
 
