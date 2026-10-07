@@ -50,6 +50,7 @@ class SettingsForm : Form
     static readonly string[] Pretty = {
         "gpu|Graphics card load, memory and temperature",
         "power|Watts drawn, and the battery on a laptop",
+        "prtg|PRTG sensors that are down (second display only)",
         "disk|Free space on every fixed drive",
         "ports|Listening ports and what is holding them",
         "clock|Clock, uptime and machine info",

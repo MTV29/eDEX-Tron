@@ -61,7 +61,9 @@ $launcher = Join-Path $Root 'eDEX-Tron.exe'
 
 # Every optional panel, and every standard one that can be switched off. Kept
 # in step with OPTIONAL / LEFT_STACK / RIGHT_STACK in gen_rainmeter_ini.py.
-$optional = @('gpu', 'power', 'disk', 'ports')
+# prtg is in the list but only ever appears on a second display; see
+# SECOND_ONLY in gen_rainmeter_ini.py.
+$optional = @('gpu', 'power', 'disk', 'ports', 'prtg')
 $standard = @('clock', 'cpuinfo', 'netstat', 'ramwatcher', 'conninfo', 'toplist')
 # Defaults for anything theme.json does not mention yet.
 $toggleDefaults = @{ keyclick = $false; hotkeys = $true; bootscreen = $true

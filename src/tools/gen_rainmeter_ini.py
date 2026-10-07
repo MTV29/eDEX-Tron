@@ -419,7 +419,8 @@ if __name__ == '__main__':
                     help='items in the folder panel (theme.json "folder")')
     ap.add_argument('--panels', default='',
                     help='optional panels to switch on, comma separated: '
-                         + ', '.join(n.lower() for n in OPTIONAL))
+                         + ', '.join(n.lower() for n in OPTIONAL + SECOND_ONLY)
+                         + ' (prtg appears on a second display only)')
     ap.add_argument('--drive-count', type=int, default=1,
                     help='fixed drives the Disk panel lists')
     ap.add_argument('--prtg-rows', type=int, default=PRTG_ROWS,
@@ -455,8 +456,14 @@ if __name__ == '__main__':
                 (t.strip().lower() for t in arg.split(',') if t.strip())
                 if s in by_lower]
 
+    # SECOND_ONLY panels are switched on the same way as the rest, through
+    # theme.json "panels" -- they are just never placed on the primary. Without
+    # that they appeared on anyone's second display whether they used the
+    # service or not, which for PRTG meant a panel reading "no config".
+    wanted_all = names(a.panels, OPTIONAL + SECOND_ONLY)
+
     p = plan(a.screen_w, a.work_h, a.dock_count, a.desk_count, a.folder_count,
-             names(a.panels, OPTIONAL), a.drive_count,
+             [n for n in wanted_all if n in OPTIONAL], a.drive_count,
              names(a.off, LEFT_STACK + RIGHT_STACK), a.power_rows)
 
     # A second display shows a copy of the panels, laid out for its own size.
@@ -466,14 +473,14 @@ if __name__ == '__main__':
     p['second'] = {}
     p['second_root'] = a.second_root or (a.root + '-2')
     if a.second_w > 0 and a.second_h > 0:
-        wanted = ([n for n in DUPLICATE if n not in p['hidden']]
-                  + list(SECOND_ONLY))
+        second_only = [n for n in SECOND_ONLY if n in wanted_all]
+        wanted = ([n for n in DUPLICATE if n not in p['hidden']] + second_only)
         placed, dropped = plan_second(wanted, a.second_w, a.second_h,
                                       a.drive_count, a.power_rows, a.second_scale,
                                       {'Dock': (p['dock_cols'], p['dock_rows']),
                                        'Desktop': (p['desk_cols'], p['desk_rows']),
                                        'Folder': (p['folder_cols'], p['folder_rows'])},
-                                      a.second_pad, SECOND_ONLY,
+                                      a.second_pad, second_only,
                                       a.prtg_rows)
         for nm, (sx, sy) in placed.items():
             p['second'][nm] = (a.second_x + sx, a.second_y + sy)
