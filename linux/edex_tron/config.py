@@ -31,7 +31,16 @@ DEFAULT_SETTINGS = {
     'prompt': True,               # eDEX prompt + fetch screen in bash/zsh
     'secondary_monitors': True,   # HUD on every monitor, not just the primary
     'terminal_font': 'Ubuntu Sans Mono 11',
+    # Which optional panels are on. The rest of the HUD is always there.
+    'panels': ['ports', 'disks', 'power'],
+    # Named panel sets, switched in one go: {'gaming': {'panels': [...]}}.
+    'profiles': {},
+    'profile': '',                # the one in force, '' when hand-edited
 }
+
+# Panels you can switch off. Everything else -- the clock, the shell, the dock
+# -- is the HUD rather than a choice.
+OPTIONAL_PANELS = ('ports', 'disks', 'power', 'processes', 'journal')
 
 
 def ensure_dirs():
@@ -92,6 +101,66 @@ def seed_user_files():
         save_settings(DEFAULT_SETTINGS)
     if not os.path.exists(DOCK_FILE):
         shutil.copyfile(data_path('dock.default.txt'), DOCK_FILE)
+
+
+# --- panels and profiles -----------------------------------------------------
+
+def enabled_panels(settings):
+    """The optional panels that are on, in a fixed order.
+
+    Unknown names are dropped rather than carried: a typo in settings.json
+    should leave that panel off, not crash the HUD on the way up.
+    """
+    wanted = {str(p).strip().lower() for p in (settings.get('panels') or [])}
+    return [p for p in OPTIONAL_PANELS if p in wanted]
+
+
+def apply_profile(settings, name):
+    """Switch to a stored profile. Returns the settings, changed in place.
+
+    Raises KeyError if there is no such profile, so a caller can say which
+    names do exist rather than silently doing nothing.
+    """
+    profiles = settings.get('profiles') or {}
+    if name not in profiles:
+        raise KeyError(name)
+    wanted = profiles[name].get('panels') or []
+    settings['panels'] = [p for p in OPTIONAL_PANELS
+                          if p in {str(x).strip().lower() for x in wanted}]
+    settings['profile'] = name
+    return settings
+
+
+def save_profile(settings, name):
+    """Store the panels that are on now under `name`, and select it."""
+    name = str(name).strip()
+    if not name:
+        raise ValueError('a profile needs a name')
+    profiles = dict(settings.get('profiles') or {})
+    profiles[name] = {'panels': enabled_panels(settings)}
+    settings['profiles'] = profiles
+    settings['profile'] = name
+    return settings
+
+
+def delete_profile(settings, name):
+    profiles = dict(settings.get('profiles') or {})
+    if name not in profiles:
+        raise KeyError(name)
+    del profiles[name]
+    settings['profiles'] = profiles
+    if settings.get('profile') == name:
+        settings['profile'] = ''
+    return settings
+
+
+def set_panels(settings, names):
+    """Switch panels by hand. Clears the profile name, because what is on is
+    then no longer the profile it claims to be."""
+    wanted = {str(n).strip().lower() for n in names}
+    settings['panels'] = [p for p in OPTIONAL_PANELS if p in wanted]
+    settings['profile'] = ''
+    return settings
 
 
 # --- colours -----------------------------------------------------------------

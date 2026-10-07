@@ -10,6 +10,7 @@ import time
 import psutil
 from gi.repository import GLib, Gtk
 
+from .. import power as power_src
 from .widgets import Bar, DotMap, Graph, KeyValue, Panel, label
 
 HISTORY = 90
@@ -382,6 +383,65 @@ def _listening():
         seen[key] = name + (' (local)' if local else '')
     return sorted(((p, port, n) for (p, port), n in seen.items()), key=lambda r: (r[1], r[0]))
 
+
+
+
+class Power(Panel):
+    """Watts drawn, and the battery where there is one.
+
+    Only the rows this machine can answer are shown. A desktop with no battery
+    and no readable RAPL gets the card alone, or an empty panel saying so --
+    there is no honest whole-system figure on Linux without a meter at the
+    wall, so none is invented.
+
+    RAPL and nvidia-smi are both slower than a frame, so they are read on a
+    worker and every few seconds rather than every tick.
+    """
+
+    def __init__(self, interval=5):
+        super().__init__('Power', '')
+        self.kv = self.add(KeyValue())
+        self.interval = interval
+        self.n = -1
+        self.rapl = power_src.RaplCounter()
+        self.busy = False
+        # Primed so the first reading is a real interval rather than nothing.
+        self.rapl.watts()
+
+    def tick(self):
+        self.n += 1
+        if self.n % self.interval or self.busy:
+            return
+        self.busy = True
+        run_async(self._read, self._show)
+
+    def _read(self):
+        percent, status, bat_w = power_src.battery()
+        bat = psutil.sensors_battery() if hasattr(psutil, 'sensors_battery') else None
+        return {
+            'battery': power_src.battery_line(percent, status, bat_w),
+            'remaining': power_src.format_remaining(bat.secsleft) if bat else None,
+            'cpu': self.rapl.watts(),
+            'gpu': power_src.gpu_watts(),
+            'system': bat_w,
+        }
+
+    def _show(self, r):
+        self.busy = False
+        if not isinstance(r, dict):
+            return
+        rows = []
+        if r['battery']:
+            rows.append(('Battery', r['battery']))
+        if r['remaining']:
+            rows.append(('Left', r['remaining']))
+        if r['system']:
+            rows.append(('System', power_src.format_watts(r['system'])))
+        rows.append(('CPU', power_src.format_watts(r['cpu'])))
+        rows.append(('GPU', power_src.format_watts(r['gpu'])))
+        for k, v in rows:
+            self.kv.set(k, v)
+        self.set_right('RAPL' if self.rapl.available else '')
 
 class Disks(Panel):
     SKIP_FS = {'squashfs', 'tmpfs', 'devtmpfs', 'overlay', 'fuse.snapfuse', 'efivarfs', '9p', 'drvfs'}

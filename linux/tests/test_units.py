@@ -12,7 +12,7 @@ os.environ.update(HOME=HOME, XDG_CONFIG_HOME=f'{HOME}/.config',
                   XDG_DATA_HOME=f'{HOME}/.local/share', XDG_STATE_HOME=f'{HOME}/.local/state')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from edex_tron import changes, config, cursor, themes  # noqa: E402
+from edex_tron import changes, config, cursor, power, themes  # noqa: E402
 
 
 def tearDownModule():
@@ -197,6 +197,87 @@ class Dock(unittest.TestCase):
                     'Bad line\nShell | !sh -c true | utilities-terminal\nWeb | https://example.org\n')
         names = [e['name'] for e in dock.parse(path)]
         self.assertEqual(names, ['Home', 'Shell', 'Web'])
+
+
+class Panels(unittest.TestCase):
+    def setUp(self):
+        self.s = json.loads(json.dumps(config.DEFAULT_SETTINGS))
+
+    def test_unknown_names_are_dropped_not_fatal(self):
+        self.assertEqual(config.enabled_panels({'panels': ['power', 'nonsense']}), ['power'])
+
+    def test_order_is_fixed_not_the_order_given(self):
+        self.assertEqual(config.enabled_panels({'panels': ['power', 'ports']}),
+                         ['ports', 'power'])
+
+    def test_profile_round_trip(self):
+        config.set_panels(self.s, ['power'])
+        config.save_profile(self.s, 'gaming')
+        config.set_panels(self.s, ['ports', 'disks'])
+        config.apply_profile(self.s, 'gaming')
+        self.assertEqual(config.enabled_panels(self.s), ['power'])
+        self.assertEqual(self.s['profile'], 'gaming')
+
+    def test_editing_by_hand_clears_the_profile_name(self):
+        config.save_profile(self.s, 'work')
+        config.set_panels(self.s, ['power'])
+        self.assertEqual(self.s['profile'], '')
+
+    def test_deleting_the_active_profile_clears_the_name(self):
+        config.save_profile(self.s, 'work')
+        config.delete_profile(self.s, 'work')
+        self.assertEqual(self.s['profile'], '')
+        self.assertNotIn('work', self.s['profiles'])
+
+    def test_unknown_profile_raises(self):
+        with self.assertRaises(KeyError):
+            config.apply_profile(self.s, 'nope')
+
+    def test_profiles_survive_a_save_and_load(self):
+        config.set_panels(self.s, ['power', 'journal'])
+        config.save_profile(self.s, 'work')
+        config.save_settings(self.s)
+        back = config.load_settings()
+        self.assertEqual(back['profiles']['work']['panels'], ['power', 'journal'])
+
+
+class Power(unittest.TestCase):
+    def test_energy_counter_to_watts(self):
+        # 10 joules over 2 seconds is 5 watts.
+        self.assertAlmostEqual(power.watts_from_energy(0, 10_000_000, 2.0), 5.0)
+
+    def test_first_reading_has_nothing_to_compare_with(self):
+        self.assertIsNone(power.watts_from_energy(None, 10, 1.0))
+        self.assertIsNone(power.watts_from_energy(0, 10, 0))
+
+    def test_counter_wrap(self):
+        # Wrapped just past the top: 2J before the wrap plus 3J after.
+        self.assertAlmostEqual(
+            power.watts_from_energy(8_000_000, 3_000_000, 1.0, wrap_at=10_000_000), 5.0)
+
+    def test_backwards_without_a_wrap_point_is_not_a_reading(self):
+        self.assertIsNone(power.watts_from_energy(10, 5, 1.0))
+
+    def test_discharge_sign_is_not_information(self):
+        self.assertAlmostEqual(power.watts_from_microwatts(-12_500_000), 12.5)
+
+    def test_format(self):
+        self.assertEqual(power.format_watts(None), '--')
+        self.assertEqual(power.format_watts(12.34), '12.3W')
+        self.assertEqual(power.format_watts(140.6), '141W')
+
+    def test_remaining_rejects_the_sentinels(self):
+        self.assertIsNone(power.format_remaining(-1))
+        self.assertIsNone(power.format_remaining(None))
+        self.assertIsNone(power.format_remaining(10 ** 9))
+        self.assertEqual(power.format_remaining(3 * 3600 + 25 * 60), '3h 25m')
+        self.assertEqual(power.format_remaining(7 * 60), '7m')
+
+    def test_battery_line(self):
+        self.assertIsNone(power.battery_line(None, 'Discharging', 1.0))
+        self.assertEqual(power.battery_line(61, 'Discharging', 12.4),
+                         '61% on battery  12.4W')
+        self.assertEqual(power.battery_line(100, 'Full', None), '100% full')
 
 
 if __name__ == '__main__':

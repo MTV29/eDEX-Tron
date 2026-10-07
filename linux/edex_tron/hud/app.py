@@ -15,13 +15,13 @@ gi.require_version('Gdk', '4.0')
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from .. import APP_ID  # noqa: E402
-from ..config import (DOCK_FILE, THEME_FILE, load_settings, load_theme,  # noqa: E402
-                      palette, seed_user_files)
+from ..config import (DOCK_FILE, THEME_FILE, enabled_panels, load_settings,  # noqa: E402
+                      load_theme, palette, seed_user_files)
 from . import style  # noqa: E402
 from .dock import Dock  # noqa: E402
 from .files import Desktop, Filesystem  # noqa: E402
 from .panels import (Clock, Cpu, Disks, JournalTail, Memory, NetworkGraph,  # noqa: E402
-                     NetworkStatus, Ports, Processes, System)
+                     NetworkStatus, Ports, Power, Processes, System)
 from .terminal import Shell  # noqa: E402
 from .widgets import Theme  # noqa: E402
 
@@ -85,12 +85,15 @@ class HudWindow(Gtk.ApplicationWindow):
 
     def _primary_layout(self, root, side, h, gap):
         a = self._add
-        procs = a(Processes())
-        procs.set_vexpand(True)
-        left = column(side,
-                      a(Clock()), a(System()), a(Cpu()), a(Memory()), procs,
-                      spacing=gap)
         s = self.app.settings
+        # Which optional panels are on; the rest of the HUD is not a choice.
+        on = enabled_panels(s)
+        left_panels = [a(Clock()), a(System()), a(Cpu()), a(Memory())]
+        if 'processes' in on:
+            procs = a(Processes())
+            procs.set_vexpand(True)
+            left_panels.append(procs)
+        left = column(side, *left_panels, spacing=gap)
         self.shell = a(Shell(self.app.palette, s['terminal_font'], self._cwd_changed))
         self.shell.set_vexpand(True)
         self.files = a(Filesystem(self.shell))
@@ -102,26 +105,38 @@ class HudWindow(Gtk.ApplicationWindow):
         centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=gap, hexpand=True)
         centre.append(self.shell)
         centre.append(bottom)
-        ports = a(Ports())
-        ports.set_vexpand(True)
-        right = column(side,
-                       a(NetworkStatus()), a(NetworkGraph()), ports, a(Disks()),
-                       a(Dock(self.app.edit_dock)),
-                       spacing=gap)
+        right_panels = [a(NetworkStatus()), a(NetworkGraph())]
+        if 'ports' in on:
+            ports = a(Ports())
+            ports.set_vexpand(True)
+            right_panels.append(ports)
+        if 'power' in on:
+            right_panels.append(a(Power()))
+        if 'disks' in on:
+            right_panels.append(a(Disks()))
+        right_panels.append(a(Dock(self.app.edit_dock)))
+        right = column(side, *right_panels, spacing=gap)
         for w in (left, centre, right):
             root.append(w)
 
     def _secondary_layout(self, root, side, gap):
         a = self._add
+        on = enabled_panels(self.app.settings)
         mem = a(Memory())
-        left = column(side, a(Clock()), a(Cpu()), mem, spacing=gap)
-        log = a(JournalTail())
-        log.set_hexpand(True)
-        log.set_vexpand(True)
-        disks = a(Disks())
-        disks.set_vexpand(True)
-        right = column(side, a(NetworkGraph()), disks, spacing=gap)
-        for w in (left, log, right):
+        left_panels = [a(Clock()), a(Cpu()), mem]
+        if 'power' in on:
+            left_panels.append(a(Power()))
+        left = column(side, *left_panels, spacing=gap)
+        middle = a(JournalTail()) if 'journal' in on else Gtk.Box()
+        middle.set_hexpand(True)
+        middle.set_vexpand(True)
+        right_panels = [a(NetworkGraph())]
+        if 'disks' in on:
+            disks = a(Disks())
+            disks.set_vexpand(True)
+            right_panels.append(disks)
+        right = column(side, *right_panels, spacing=gap)
+        for w in (left, middle, right):
             root.append(w)
 
     def _cwd_changed(self, path):

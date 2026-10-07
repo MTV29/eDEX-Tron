@@ -2,7 +2,7 @@
 import argparse
 import sys
 
-from . import VERSION
+from . import VERSION, config
 
 EFFECT_KEYS = {'scanlines': 'scanlines', 'glow': 'glow', 'tv': 'tv-animation'}
 
@@ -61,6 +61,67 @@ def _theme(args):
     return 1 if failures else 0
 
 
+def _panels(args):
+    """Show or change the optional panels, and the named sets of them.
+
+    Order matters, and matches the Windows side: --save captures what is on
+    now, --profile then applies a stored set, and names given on the command
+    line still win -- so "save this, switch to that" works in one go.
+    """
+    s = config.load_settings()
+    changed = False
+
+    if args.save:
+        try:
+            config.save_profile(s, args.save)
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 2
+        print(f'profile saved: {args.save}')
+        changed = True
+
+    if args.delete:
+        try:
+            config.delete_profile(s, args.delete)
+        except KeyError:
+            print(f'no such profile: {args.delete}', file=sys.stderr)
+            return 2
+        print(f'profile deleted: {args.delete}')
+        changed = True
+
+    if args.profile:
+        try:
+            config.apply_profile(s, args.profile)
+        except KeyError:
+            have = ', '.join(sorted(s.get('profiles') or {})) or 'none saved'
+            print(f'no such profile: {args.profile} (have: {have})', file=sys.stderr)
+            return 2
+        print(f'profile applied: {args.profile}')
+        changed = True
+
+    if args.names:
+        unknown = [n for n in args.names if n.lower() not in config.OPTIONAL_PANELS]
+        if unknown:
+            print('not a panel: ' + ', '.join(unknown) + '\nchoose from: '
+                  + ' '.join(config.OPTIONAL_PANELS), file=sys.stderr)
+            return 2
+        config.set_panels(s, args.names)
+        changed = True
+
+    if changed:
+        config.save_settings(s)
+
+    on = config.enabled_panels(s)
+    print('panels : ' + (' '.join(on) if on else '(none)'))
+    print('off    : ' + (' '.join(p for p in config.OPTIONAL_PANELS if p not in on) or '(none)'))
+    print('profile: ' + (s.get('profile') or '(unsaved)'))
+    saved = sorted(s.get('profiles') or {})
+    print('saved  : ' + (' '.join(saved) if saved else '(none)'))
+    if changed:
+        print('\nRestart the HUD to see it: edex-tron off && edex-tron on')
+    return 0
+
+
 def _boot(args):
     from .boot import request
     from .config import load_theme
@@ -116,6 +177,13 @@ def main(argv=None):
     r = sub.add_parser('reapply', help='regenerate everything (e.g. after changing screens)')
     r.add_argument('parts', nargs='*', help='only these: wallpaper icon gtk shell qt cursor terminal')
 
+    p = sub.add_parser('panels', help='which optional panels are on, and named sets of them')
+    p.add_argument('names', nargs='*',
+                   help='switch these on and the rest off: ' + ' '.join(config.OPTIONAL_PANELS))
+    p.add_argument('--profile', help='apply a saved set')
+    p.add_argument('--save', metavar='NAME', help='save the panels that are on now')
+    p.add_argument('--delete', metavar='NAME', help='remove a saved set')
+
     sub.add_parser('doctor', help='check the installation')
     sub.add_parser('uninstall', help='remove the theme for this user and restore your settings')
 
@@ -146,6 +214,8 @@ def main(argv=None):
         return 0
     if args.cmd == 'status':
         return apply.status()
+    if args.cmd == 'panels':
+        return _panels(args)
     if args.cmd == 'theme':
         return _theme(args)
     if args.cmd == 'effects':

@@ -65,6 +65,8 @@ setup for their own account.
 | Edit the dock | Click **[ + EDIT ]** on the dock; it rebuilds when you save |
 | Boot menu and splash | `edex-tron boot install` (add `--show-menu` to always show the menu); `edex-tron boot remove`; `edex-tron boot preview` renders them to a folder |
 | After changing screens | `edex-tron reapply wallpaper` |
+| Which panels are on | `edex-tron panels power ports` (names it lists are on, the rest off) |
+| Save / switch a panel set | `edex-tron panels --save gaming`, `edex-tron panels --profile work` |
 | Something's wrong | `edex-tron doctor`, or `edex-tron hud --window` to see errors |
 
 **Dock format** (`~/.config/edex-tron/dock.txt`), one app per line:
@@ -76,6 +78,21 @@ skipped.
 **Settings** (`~/.config/edex-tron/settings.json`): `prompt` (the eDEX
 prompt in bash/zsh; set `EDEX_TRON_PROMPT=0` to skip it in one shell),
 `secondary_monitors`, `terminal_font`.
+
+**Optional panels** — `ports`, `disks`, `power`, `processes` and `journal` can
+be switched off; the clock, the shell and the dock are the HUD rather than a
+choice. `edex-tron panels` on its own says what is on. A **profile** is a named
+set of them, switched in one go: it holds the panel choice and nothing else, so
+switching one is not a bigger surprise than the name suggests. Changing panels by
+hand clears the profile name, because what is on is then no longer the profile it
+claims to be. Restart the HUD to see a change: `edex-tron off && edex-tron on`.
+
+**POWER** shows watts, and the battery where there is one. The battery comes from
+`/sys/class/power_supply`, the processor from Intel RAPL, and the card from
+`nvidia-smi`. RAPL is a counter rather than a gauge, so the first reading is
+blank and the second is real; on most kernels since 2020 it is root-only, in
+which case the row reads `--` rather than guessing. Only the rows your machine
+can answer are shown.
 
 ## What setup changes
 
