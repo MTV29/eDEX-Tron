@@ -185,8 +185,11 @@ you have been up. Any key skips it; turn it off in Settings.
 
 It comes up on every display: one window does the work and the others mirror
 it, so there is one log, one timer and one sound however many screens you
-have. The text scales with each screen, then takes `bootscale` off that —
-half by default, which leaves the lower part of the screen free.
+have. The primary is drawn at the size it was designed at; another display
+is scaled by how much bigger it is than the primary, so a larger screen
+gets larger text rather than the same text adrift in more space.
+`bootscale` takes something off that — at 0.75 a screen two thirds taller
+is drawn half again as large, which leaves the lower part free.
 
 A sound plays over it: Watch Dogs' boot sequence, which is what the screen was
 built around. `bootsoundspeed` plays it faster than recorded (1.6 by default),

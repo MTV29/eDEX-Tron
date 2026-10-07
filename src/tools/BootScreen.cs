@@ -243,10 +243,13 @@ static class BootScreen
     class Mirror : Form
     {
         readonly Screen owner;
+        readonly double scale;
 
-        public Mirror(Screen owner, Rectangle bounds, Color back)
+        public Mirror(Screen owner, Rectangle bounds, Color back, int primaryHeight)
         {
             this.owner = owner;
+            // Worked out once: this display's size relative to the primary's.
+            this.scale = Screen.ScaleFor(bounds.Height, primaryHeight);
             Text = "eDEX-Tron boot (mirror)";
             FormBorderStyle = FormBorderStyle.None;
             // Bounds rather than Maximized: maximising puts it on whichever
@@ -266,7 +269,7 @@ static class BootScreen
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            try { owner.Draw(e.Graphics, ClientSize.Width, ClientSize.Height); }
+            try { owner.Draw(e.Graphics, ClientSize.Width, ClientSize.Height, scale); }
             catch { }
         }
     }
@@ -285,21 +288,23 @@ static class BootScreen
         readonly Dictionary<double, Font[]> scaledFonts = new Dictionary<double, Font[]>();
 
 
-        /// <summary>How big to draw, on a display of this height.
+        /// <summary>How big to draw on a display, relative to the primary.
         ///
-        /// The fonts were fixed sizes, which meant the log was sized for a
-        /// 1080p screen and looked like a postage stamp on anything larger.
-        /// This scales with the display, then takes "bootscale" off that --
-        /// half by default, so the log uses half the room it could and the
-        /// rest is free for more readouts.
+        /// The primary is always 1.0 -- it is the size the screen was designed
+        /// at, and the one people have already got used to. Another display is
+        /// scaled by how much taller it is than the primary, so a bigger screen
+        /// gets proportionally bigger text rather than the same text adrift in
+        /// more space.
         ///
-        /// Floored, because the arithmetic alone would put 5pt Consolas on a
-        /// 1080p primary, which is not small text so much as no text.
+        /// "bootscale" then takes something off that: at 0.75 a screen two
+        /// thirds taller is drawn half again as large rather than two thirds,
+        /// which leaves the lower part free for more readouts.
         /// </summary>
-        double ScaleFor(int h)
+        public static double ScaleFor(int height, int primaryHeight)
         {
-            double proportional = h / 1080.0;
-            double s = proportional * EdexTron.Number("bootscale", 0.5);
+            if (primaryHeight <= 0 || height <= 0) return 1.0;
+            double relative = height / (double)primaryHeight;
+            double s = 1.0 + (relative - 1.0) * EdexTron.Number("bootscale", 0.5);
             if (s < 0.75) s = 0.75;
             if (s > 3.0) s = 3.0;
             return Math.Round(s, 2);
@@ -372,10 +377,12 @@ static class BootScreen
 
             // One mirror per other display. They own nothing -- no timer, no
             // log, no sound -- and paint this screen's state at their own size.
+            var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
+            int primaryH = primaryScreen != null ? primaryScreen.Bounds.Height : 1080;
             foreach (var scr in System.Windows.Forms.Screen.AllScreens)
             {
                 if (scr.Primary) continue;
-                var m = new Mirror(this, scr.Bounds, back);
+                var m = new Mirror(this, scr.Bounds, back, primaryH);
                 mirrors.Add(m);
                 m.Show();
             }
@@ -557,7 +564,8 @@ static class BootScreen
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            Draw(e.Graphics, ClientSize.Width, ClientSize.Height);
+            // The primary is never rescaled: 1.0 is the size it was drawn at.
+            Draw(e.Graphics, ClientSize.Width, ClientSize.Height, 1.0);
         }
 
         /// <summary>Paint the boot screen at a given size.
@@ -566,7 +574,7 @@ static class BootScreen
         /// same thing without owning any of it: there is one log, one timer and
         /// one sound, and a second Screen would start a second of each.
         /// </summary>
-        public void Draw(Graphics g, int w, int h)
+        public void Draw(Graphics g, int w, int h, double sc)
         {
             g.Clear(back);
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
@@ -576,7 +584,6 @@ static class BootScreen
             // Everything that positions the text scales with it. Scaling the
             // fonts alone would leave the margins and the tag column sized for
             // 1080p, so the text would grow into them.
-            double sc = ScaleFor(h);
             Font[] f = FontsFor(sc);
             Font fLog = f[0], fTitle = f[1], fSmall = f[2];
             int pad = (int)(46 * sc);
