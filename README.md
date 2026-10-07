@@ -183,6 +183,11 @@ read off the machine as it scrolls: the real processor, memory, drives, display
 adapter, network links, the services Windows actually has running, and how long
 you have been up. Any key skips it; turn it off in Settings.
 
+It comes up on every display: one window does the work and the others mirror
+it, so there is one log, one timer and one sound however many screens you
+have. The text scales with each screen, then takes `bootscale` off that —
+half by default, which leaves the lower part of the screen free.
+
 A sound plays over it: Watch Dogs' boot sequence, which is what the screen was
 built around. `bootsoundspeed` plays it faster than recorded (1.6 by default),
 and it fades out when the screen closes rather than cutting. To use something

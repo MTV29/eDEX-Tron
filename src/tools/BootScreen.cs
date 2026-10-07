@@ -280,6 +280,45 @@ static class BootScreen
         readonly string version;
         readonly Thread worker;
         readonly Font logFont, titleFont, smallFont;
+        // Fonts for a display that is not the primary's size, made once
+        // and kept: the mirrors repaint on every tick.
+        readonly Dictionary<double, Font[]> scaledFonts = new Dictionary<double, Font[]>();
+
+
+        /// <summary>How big to draw, on a display of this height.
+        ///
+        /// The fonts were fixed sizes, which meant the log was sized for a
+        /// 1080p screen and looked like a postage stamp on anything larger.
+        /// This scales with the display, then takes "bootscale" off that --
+        /// half by default, so the log uses half the room it could and the
+        /// rest is free for more readouts.
+        ///
+        /// Floored, because the arithmetic alone would put 5pt Consolas on a
+        /// 1080p primary, which is not small text so much as no text.
+        /// </summary>
+        double ScaleFor(int h)
+        {
+            double proportional = h / 1080.0;
+            double s = proportional * EdexTron.Number("bootscale", 0.5);
+            if (s < 0.75) s = 0.75;
+            if (s > 3.0) s = 3.0;
+            return Math.Round(s, 2);
+        }
+
+        /// <summary>log, title, small -- at a given scale.</summary>
+        Font[] FontsFor(double scale)
+        {
+            Font[] f;
+            if (scaledFonts.TryGetValue(scale, out f)) return f;
+            f = new Font[] {
+                new Font("Consolas", (float)(10f * scale)),
+                Installed("Bahnschrift") ? new Font("Bahnschrift", (float)(34f * scale))
+                                         : new Font("Segoe UI", (float)(32f * scale)),
+                new Font("Consolas", (float)(9f * scale)),
+            };
+            scaledFonts[scale] = f;
+            return f;
+        }
         bool collected, finished;
         int readyTicks;
         readonly DateTime opened = DateTime.UtcNow;
@@ -533,30 +572,42 @@ static class BootScreen
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
             int split = (int)(w * 0.62);
+
+            // Everything that positions the text scales with it. Scaling the
+            // fonts alone would leave the margins and the tag column sized for
+            // 1080p, so the text would grow into them.
+            double sc = ScaleFor(h);
+            Font[] f = FontsFor(sc);
+            Font fLog = f[0], fTitle = f[1], fSmall = f[2];
+            int pad = (int)(46 * sc);
+            int tagCol = (int)(78 * sc);
+
             using (var dim = new SolidBrush(Color.FromArgb(110, accent)))
             using (var mid = new SolidBrush(Color.FromArgb(190, accent)))
             using (var full = new SolidBrush(accent))
             using (var rule = new Pen(Color.FromArgb(90, accent)))
             {
                 // the log, left
-                int lh = logFont.Height + 3;
-                int y = 46;
+                int lh = fLog.Height + (int)(3 * sc);
+                int y = pad;
                 foreach (var line in lines)
                 {
                     string tag = "[ " + line.Tag.PadRight(4) + " ]";
-                    g.DrawString(tag, logFont, line.Tag == "OK" ? mid : dim, 46, y);
-                    g.DrawString(line.Text, logFont, full, 46 + 78, y);
+                    g.DrawString(tag, fLog, line.Tag == "OK" ? mid : dim, pad, y);
+                    g.DrawString(line.Text, fLog, full, pad + tagCol, y);
                     y += lh;
-                    if (y > h - 60) break;
+                    if (y > h - (int)(60 * sc)) break;
                 }
 
                 // the title block, right
-                g.DrawLine(rule, split, 40, split, h - 40);
-                int tx = split + 48;
-                g.DrawString("eDEX-TRON", titleFont, full, tx, h / 2 - 90);
-                g.DrawString(version, smallFont, mid, tx + 4, h / 2 - 34);
-                g.DrawString(finished ? "READY" : "STARTING", smallFont, full, tx + 4, h / 2 + 4);
-                g.DrawString("any key to skip", smallFont, dim, tx + 4, h - 70);
+                g.DrawLine(rule, split, (int)(40 * sc), split, h - (int)(40 * sc));
+                int tx = split + (int)(48 * sc);
+                g.DrawString("eDEX-TRON", fTitle, full, tx, h / 2 - (int)(90 * sc));
+                g.DrawString(version, fSmall, mid, tx + (int)(4 * sc), h / 2 - (int)(34 * sc));
+                g.DrawString(finished ? "READY" : "STARTING", fSmall, full,
+                             tx + (int)(4 * sc), h / 2 + (int)(4 * sc));
+                g.DrawString("any key to skip", fSmall, dim,
+                             tx + (int)(4 * sc), h - (int)(70 * sc));
             }
         }
     }

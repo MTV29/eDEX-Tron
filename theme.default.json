@@ -10,6 +10,7 @@
     "ports"
   ],
   "off": [],
+  "bootscale": 0.5,
   "bootsoundspeed": 1.6,
   "font": "auto",
   "keyclickms": 43,
