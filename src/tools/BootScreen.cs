@@ -16,6 +16,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using Microsoft.Win32;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
@@ -215,6 +216,7 @@ static class BootScreen
                 try
                 {
                     if (svc.Status != ServiceControllerStatus.Running) continue;
+                    if (Demo && !IsWindowsOwn(svc.ServiceName)) continue;
                     string name = svc.DisplayName;
                     if (name.Length > 46) name = name.Substring(0, 46);
                     emit(new Line("OK", "started " + name));
@@ -487,6 +489,36 @@ static class BootScreen
     /// one flag and cannot miss a frame.
     /// </summary>
     public static bool Demo;
+
+    /// <summary>Is this service part of Windows, rather than something
+    /// installed here?
+    ///
+    /// The running services are the most convincing thing in the log and the
+    /// last thing in it that is still personal: they name the software on the
+    /// machine. In demo mode only Windows' own are listed, decided by where
+    /// the binary lives rather than by a list of names to leave out -- a
+    /// blocklist is only ever as good as whoever last thought about it, and
+    /// the whole point is that nobody has to think about it again.
+    /// </summary>
+    static bool IsWindowsOwn(string serviceName)
+    {
+        try
+        {
+            using (RegistryKey k = Registry.LocalMachine.OpenSubKey(
+                       @"SYSTEM\CurrentControlSet\Services\" + serviceName))
+            {
+                if (k == null) return false;
+                string path = k.GetValue("ImagePath") as string;
+                if (string.IsNullOrEmpty(path)) return false;
+                path = Environment.ExpandEnvironmentVariables(path.Trim());
+                if (path.StartsWith(@"\??\")) path = path.Substring(4);
+                if (path.StartsWith("\"")) path = path.Substring(1);
+                string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                return path.StartsWith(win, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch { return false; }
+    }
 
     /// <summary>An address of the same shape, on a documentation subnet.</summary>
     static string Mask(string ip)

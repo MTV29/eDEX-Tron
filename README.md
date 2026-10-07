@@ -6,6 +6,10 @@ eDEX-UI's look to your whole desktop while you keep using Windows normally:
 live system panels, a built-in shell, a shortcut dock, and a matching colour
 scheme across Windows, the taskbar, Windows Terminal, VS Code and Office.
 
+![The eDEX-Tron HUD](docs/hud.gif)
+
+<p align="center"><em>Live panels, composited from the theme's own windows.</em></p>
+
 > **Version 0.9 — pre-release.** It works day to day, but it is still changing.
 > Everything it changes is backed up and can be undone.
 
@@ -171,6 +175,8 @@ what is on screen is no longer the profile it claims to be.
 powershell -File src\tools\settings.ps1 -SaveProfile gaming
 powershell -File src\tools\settings.ps1 -Profile work
 ```
+
+![The boot screen](docs/boot.gif)
 
 **Boot screen** — the theme opens with eDEX's startup log. Everything in it is
 read off the machine as it scrolls: the real processor, memory, drives, display
