@@ -283,6 +283,9 @@ def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
     # so enlarging them would blur the icons rather than enlarge them. Only the
     # drawn panels take the scale.
     widths = {}
+    # Wider than the rest: a device/sensor pair and a duration do not fit in a
+    # column sized for the standard panels.
+    widths['Prtg'] = int(round(PRTG_W * scale))
     for name, (cols, rows) in (grids or {}).items():
         heights[name] = grid_h(max(1, rows))
         widths[name] = grid_w(max(1, cols))
@@ -352,6 +355,7 @@ DUPLICATE = LEFT_STACK + RIGHT_STACK + OPTIONAL + ('Dock', 'Desktop', 'Folder')
 # They are not in ORDER, so the primary's config never mentions them.
 SECOND_ONLY = ('Prtg',)
 PRTG_ROWS = 10               # gen_skins prtg(): sensors listed, plus a total
+PRTG_W = int(PANEL_W * 1.6)  # gen_skins prtg(): 1.6x a standard panel
 
 ORDER = ['Clock', 'CpuInfo', 'NetStat', 'RamWatcher', 'ConnInfo', 'TopList',
          'Disk', 'Ports', 'Gpu', 'Power',

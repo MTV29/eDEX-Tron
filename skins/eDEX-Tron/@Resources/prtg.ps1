@@ -27,7 +27,7 @@ param([string]$Config = '')
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-function Row([string]$a, [string]$b) { '{0,-22}{1}' -f $a, $b }
+function Row([string]$a, [string]$b) { '{0,-35}{1}' -f $a, $b }
 
 $cfgPath = $Config
 if (-not $cfgPath) {
@@ -66,9 +66,11 @@ public class PrtgCertPolicy : ICertificatePolicy {
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 
 # status 5 is Down, 13 Down (Acknowledged), 14 Down (Partial). Sorted by
-# lastup ascending, so whatever has been down longest is at the top.
+# lastup descending -- PRTG's "-" prefix -- so the most recently up is at the
+# top: the smallest time since it was last seen, which is what has just gone
+# down and is worth looking at. Something down for three years is not news.
 $uri = ('{0}/api/table.json?content=sensors&output=json&columns=device,sensor,lastup,status' +
-        '&filter_status=5&filter_status=13&filter_status=14&sortby=lastup&count={1}&apitoken={2}') -f
+        '&filter_status=5&filter_status=13&filter_status=14&sortby=-lastup&count={1}&apitoken={2}') -f
        $cfg.server.TrimEnd('/'), $rows, [uri]::EscapeDataString([string]$cfg.apitoken)
 
 try {
@@ -116,7 +118,7 @@ foreach ($s in $list | Select-Object -First $rows) {
     $name = [string]$s.sensor
     $dev = [string]$s.device
     $label = if ($dev) { "$dev/$name" } else { $name }
-    if ($label.Length -gt 21) { $label = $label.Substring(0, 20) + '.' }
+    if ($label.Length -gt 34) { $label = $label.Substring(0, 33) + '.' }
     Row $label $when
 }
 

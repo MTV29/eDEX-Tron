@@ -708,7 +708,7 @@ def power(interval=15):
 
 
 # -------------------------------------------------------------------- PRTG ---
-def prtg(rows=10, interval=60):
+def prtg(rows=10, interval=60, width=None):
     """Sensors that are down in PRTG, longest-down first.
 
     @Resources/prtg.ps1 reads runtime/prtg.json for the server and an API
@@ -722,8 +722,16 @@ def prtg(rows=10, interval=60):
     """
     cfg = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__)))), 'runtime', 'prtg.json')
+    # Derived from the panel width rather than a fixed number, so it follows
+    # --scale: at 1.1 the fonts grew and a literal 400 did not, and every row
+    # wrapped onto two lines. 1.6x is PRTG_W in the planner, which has to agree.
+    if width is None:
+        width = int(round(W * 1.6))
     hdr = skin_header(extra='OnRefreshAction=[!CommandMeasure MeasurePrtg "Run"]')
-    return '{N}{N}'.replace('{N}', chr(10)).join([hdr, header('Sensors Down', 'prtg'), textwrap.dedent(f"""
+    # Wider than the standard panel: a device/sensor pair plus how long it has
+    # been down does not fit in a column sized for "VRAM 0.0/6.0G".
+    return '{N}{N}'.replace('{N}', chr(10)).join([hdr,
+        header('PRTG Sensors', 'down', width=width), textwrap.dedent(f"""
     [MeasurePrtg]
     Measure=Plugin
     Plugin=RunCommand
@@ -744,7 +752,7 @@ def prtg(rows=10, interval=60):
     MeasureName=MeasurePrtg
     X={PAD}
     Y=10R
-    W={W - PAD * 2}
+    W={width - PAD * 2}
     FontFace=#FontMono#
     FontSize={FS_MONO}
     FontColor=#Accent#,235
