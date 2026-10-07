@@ -988,6 +988,9 @@ def main():
                    help='comma-separated drive letters for the Disk panel')
     p.add_argument('--gpu-name', default='',
                    help='short card name, shown in the GPU panel caption')
+    p.add_argument('--scale', type=float, default=1.0,
+                   help='size multiplier for every panel, e.g. 1.1 for a '
+                        'second display that wants them bigger')
     p.add_argument('--font', default='',
                    help='font set: auto, windows, or one of '
                         + ', '.join(sorted(FONT_SETS))
@@ -998,6 +1001,23 @@ def main():
 
     global W
     W = a.width
+
+
+    # Scaling a panel means scaling everything that decides its size: the
+    # width alone would give wider boxes holding the same small text, and the
+    # row metrics alone would space unchanged type further apart. These are
+    # the whole set, which is why they are module-level constants.
+    if abs(a.scale - 1.0) > 1e-6:
+        global PAD, FS_HEAD, FS_LABEL, FS_VAL, FS_BIG, FS_CLOCK, FS_MONO
+        global ROW, GAP, H_VAL, H_LABEL
+        sc = a.scale
+        W = int(round(W * sc))
+        PAD = int(round(PAD * sc))
+        FS_HEAD = int(round(FS_HEAD * sc));  FS_LABEL = int(round(FS_LABEL * sc))
+        FS_VAL = int(round(FS_VAL * sc));    FS_BIG = int(round(FS_BIG * sc))
+        FS_CLOCK = int(round(FS_CLOCK * sc)); FS_MONO = int(round(FS_MONO * sc))
+        ROW = int(round(ROW * sc));          GAP = int(round(GAP * sc))
+        H_VAL = int(round(H_VAL * sc));      H_LABEL = int(round(H_LABEL * sc))
 
     th = load_theme(a.theme)
     font = a.font.strip().lower()

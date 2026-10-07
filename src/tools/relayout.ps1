@@ -54,6 +54,67 @@ $logW  = [int][Math]::Floor($physW / $scale)
 $logWorkH = [int][Math]::Floor(($work.B - $work.T) / $scale)
 "screen: ${physW}px wide at $([int]($scale*100))% -> logical ${logW} x ${logWorkH} work area"
 
+# --- 1b. a second display, if there is one ----------------------------------
+# The planner solves one screen. Anything it cannot fit there goes onto the
+# largest other display, stacked in a column -- see plan_second.
+#
+# The coordinates have to be in the same units Rainmeter writes: it multiplies
+# WindowX/WindowY by the display scale, so what it wants is physical pixels
+# divided by that scale. System.Windows.Forms.Screen reports the other monitor
+# in a virtualised space that does not survive that round trip -- a panel asked
+# for ended up 164px left and 342px above the monitor it was meant to be on,
+# i.e. nowhere. EnumDisplayMonitors gives the true physical rectangle.
+Add-Type -Namespace Relayout -Name Mon -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonEnum cb, IntPtr data);
+[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern bool GetMonitorInfo(IntPtr mon, ref MONITORINFO mi);
+public delegate bool MonEnum(IntPtr mon, IntPtr dc, IntPtr rect, IntPtr data);
+[StructLayout(LayoutKind.Sequential)] public struct RECT2 { public int L, T, R, B; }
+[StructLayout(LayoutKind.Sequential)] public struct MONITORINFO {
+    public int cbSize; public RECT2 rcMonitor; public RECT2 rcWork; public uint dwFlags; }
+'@
+
+$monitors = New-Object System.Collections.ArrayList
+$monCb = [Relayout.Mon+MonEnum] {
+    param($mon, $dc, $rect, $data)
+    $mi = New-Object Relayout.Mon+MONITORINFO
+    $mi.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($mi)
+    if ([Relayout.Mon]::GetMonitorInfo($mon, [ref]$mi)) {
+        [void]$monitors.Add([pscustomobject]@{
+            X = $mi.rcWork.L; Y = $mi.rcWork.T
+            W = $mi.rcWork.R - $mi.rcWork.L
+            H = $mi.rcWork.B - $mi.rcWork.T
+            Primary = [bool]($mi.dwFlags -band 1)   # MONITORINFOF_PRIMARY
+        })
+    }
+    $true
+}
+[void][Relayout.Mon]::EnumDisplayMonitors([IntPtr]::Zero, [IntPtr]::Zero, $monCb, [IntPtr]::Zero)
+
+# The duplicate is drawn 10% larger -- a second screen is usually further
+# away -- and inset from the left edge, because a second monitor is rarely
+# flush with the primary and a panel hard against the edge reads as falling
+# off it.
+$secondScale = 1.1
+$secondPad = 75
+$secondW = 0; $secondH = 0; $secondX = 0; $secondY = 0
+if ($monitors.Count -gt 1) {
+    $primaryMon = $monitors | Where-Object { $_.Primary } | Select-Object -First 1
+    if (-not $primaryMon) { $primaryMon = $monitors[0] }
+    # Largest working area: with three screens, the biggest is the one most
+    # likely to have room for whatever did not fit.
+    $other = $monitors | Where-Object { -not $_.Primary } |
+             Sort-Object { $_.W * $_.H } -Descending | Select-Object -First 1
+    if ($other) {
+        $secondW = [int][Math]::Floor($other.W / $scale)
+        $secondH = [int][Math]::Floor($other.H / $scale)
+        $secondX = [int][Math]::Floor(($other.X - $primaryMon.X) / $scale)
+        $secondY = [int][Math]::Floor(($other.Y - $primaryMon.Y) / $scale)
+        "second display: $($other.W)x$($other.H) at $($other.X),$($other.Y) physical" +
+        " -> ${secondW}x${secondH} at ${secondX},${secondY} logical"
+    }
+}
+
+
 # --- 2. what goes in the dock and the Desktop grid --------------------------
 $dockCfg = Join-Path $Root 'dock.txt'
 $dockLine = & (Join-Path $tools 'gen_dock.ps1') -Config $dockCfg -SkinRoot $srcSkins | Select-Object -First 1
@@ -115,6 +176,11 @@ $powerRows = 3
 if (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) { $powerRows = 5 }
 
 $planArgs = @('--drive-count', $drives.Count, '--power-rows', $powerRows)
+if ($secondW -gt 0 -and $secondH -gt 0) {
+    $planArgs += @('--second-w', $secondW, '--second-h', $secondH,
+                   '--second-x', $secondX, '--second-y', $secondY,
+                   '--second-scale', $secondScale, '--second-pad', $secondPad)
+}
 if ($panels)    { $planArgs += @('--panels', ($panels -join ',')) }
 if ($offPanels) { $planArgs += @('--off', ($offPanels -join ',')) }
 
@@ -194,6 +260,39 @@ for ($attempt = 1; $attempt -le 4; $attempt++) {
 }
 if (-not $deployed) { throw "skins were not deployed to $live" }
 
+# A duplicate for the second display. Rainmeter loads a config once, so the
+# copy needs a folder of its own; the skins inside are identical. Removed
+# again when there is no second display, or the old copy would sit there
+# pointing at a monitor that is gone.
+$live2 = Join-Path $skinRoot 'eDEX-Tron-2'
+if ($secondW -gt 0 -and $secondH -gt 0) {
+    try {
+        if (Test-Path $live2) { Remove-Item $live2 -Recurse -Force -ErrorAction Stop }
+        Copy-Item $live $live2 -Recurse -Force -ErrorAction Stop
+        # The copy above carries the grids and @Resources; the drawn panels
+        # are then replaced with a set generated at the larger size. The
+        # grids are not regenerated: they are icon bitmaps extracted at a
+        # fixed size, so scaling them would blur rather than enlarge.
+        $scaled = Join-Path $Root 'build\skins-2'
+        if (Test-Path $scaled) { Remove-Item $scaled -Recurse -Force }
+        Invoke-Py (Join-Path $tools 'gen_skins.py') --out $scaled `
+            --cores $cpu.NumberOfLogicalProcessors --cpu-name $cpuName `
+            --width 250 --scale $secondScale `
+            --term-width $plan.term_w --term-height $plan.term_h `
+            --desktop $desktop --folder $folder `
+            --drives ($drives -join ',') --gpu-name $gpuName | Out-Null
+        foreach ($d in Get-ChildItem $scaled -Directory) {
+            $dest = Join-Path $live2 $d.Name
+            if (Test-Path $dest) { Copy-Item (Join-Path $d.FullName '*') $dest -Recurse -Force }
+        }
+        "duplicate drawn at $([int]($secondScale * 100))%"
+        'duplicate deployed -> ' + $live2
+    } catch { Write-Warning "could not deploy the duplicate: $($_.Exception.Message)" }
+} elseif (Test-Path $live2) {
+    try { Remove-Item $live2 -Recurse -Force -ErrorAction Stop; 'duplicate removed (one display)' }
+    catch { }
+}
+
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\Rainmeter" | Out-Null
 $ini = Join-Path $Root 'build\Rainmeter.ini'
 Invoke-Py (Join-Path $tools 'gen_rainmeter_ini.py') --skin-path "$skinRoot\" --out $ini `
@@ -210,8 +309,10 @@ if ((Test-Path $rmExe) -and ($running -or -not $env:EDEX_NO_START)) {
 # A display change is also when the wallpapers stop matching: relayout runs
 # on WM_DISPLAYCHANGE, so this is where a newly plugged-in monitor gets its
 # own picture rather than the primary's stretched to fit.
+# $monitors comes from EnumDisplayMonitors above -- the same enumeration the
+# layout uses, rather than a second opinion from another API.
 try {
-    if ([System.Windows.Forms.Screen]::AllScreens.Count -gt 1) {
+    if ($monitors.Count -gt 1) {
         & (Join-Path $tools 'set_wallpapers.ps1') | ForEach-Object { "  $_" }
     }
 } catch { "  per-monitor wallpaper skipped: $($_.Exception.Message)" }

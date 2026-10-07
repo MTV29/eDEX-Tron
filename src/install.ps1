@@ -604,6 +604,15 @@ Broadcast-SettingChange
 # them any earlier loses the same race.
 Restore-FontSmoothing
 
+# The taskbar is part of the theme too. Setup installs TranslucentTB and the
+# launcher starts it, but nothing said what it should look like, so a fresh
+# install matched the theme only by luck.
+Write-Step 'Theming the taskbar'
+try {
+    & (Join-Path $PSScriptRoot 'tools\set_taskbar.ps1') -Background $BackgroundHex |
+        ForEach-Object { Write-Ok $_ }
+} catch { Write-Warn2 "taskbar theming skipped: $($_.Exception.Message)" }
+
 Register-AppEntry
 
 Write-Host ''

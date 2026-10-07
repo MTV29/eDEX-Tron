@@ -190,6 +190,13 @@ if (Test-Path $vscodeTheme) {
     Write-Ok 'VS Code theme removed (pick another theme in VS Code)'
 }
 
+# ------------------------------------------------------------------- taskbar
+Write-Step 'Restoring the taskbar'
+try {
+    & (Join-Path $PSScriptRoot 'tools\set_taskbar.ps1') -Restore |
+        ForEach-Object { Write-Ok $_ }
+} catch { Write-Warn2 "taskbar restore skipped: $($_.Exception.Message)" }
+
 # --------------------------------------------------------------------- fonts
 if (-not $KeepFonts) {
     Write-Step 'Removing fonts'

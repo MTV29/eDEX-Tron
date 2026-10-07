@@ -244,6 +244,82 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
 # missing here is simply never written out: it has a place on screen and no
 # entry telling Rainmeter to load it, and the only symptom is that it does
 # not appear. Keep this in step with OPTIONAL.
+
+
+def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
+                grids=None, left_pad=0):
+    """Lay the panels out again on a second display.
+
+    The second screen shows the same panels as the first -- a duplicate, not
+    an overflow. It gets its own layout rather than a copy of the primary's
+    coordinates, because it is rarely the same shape: here the primary is
+    1536 logical wide and the second is 3440, so repeating the positions
+    verbatim would leave the panels huddled in one corner.
+
+    Columns, filled top to bottom and wrapped left to right. There is no shell,
+    dock or desktop grid to work around on a duplicate -- those stay on the
+    primary, being either one real window or your own files -- so there is
+    nothing to solve and a simple pack is the right amount of cleverness.
+
+    Returns {name: (x, y)} in that display's logical pixels, plus whatever
+    still did not fit.
+    """
+    heights = dict(H)
+    heights['Disk'] = DISK_BASE + DISK_ROW * max(1, drives)
+    heights['Power'] = int(POWER_BASE + POWER_ROW * max(1, power_rows))
+    # The duplicate can be generated at a different size (gen_skins --scale),
+    # so the planner has to measure the panels it is actually placing.
+    if abs(scale - 1.0) > 1e-6:
+        heights = {k: int(round(v * scale)) for k, v in heights.items()}
+    panel_w = int(round(PANEL_W * scale))
+
+    # The dock, the desktop mirror and the folder panel are grids, not fixed
+    # panels: their size comes from how many rows and columns the primary plan
+    # gave them, so they are measured rather than looked up.
+    # Not scaled: the grids are made of icon bitmaps extracted at a fixed size,
+    # so enlarging them would blur the icons rather than enlarge them. Only the
+    # drawn panels take the scale.
+    widths = {}
+    for name, (cols, rows) in (grids or {}).items():
+        heights[name] = grid_h(max(1, rows))
+        widths[name] = grid_w(max(1, cols))
+
+    pos, dropped = {}, []
+    if work_w < panel_w + MARGIN * 2 or work_h < MARGIN * 2:
+        return {}, list(names)
+
+    # left_pad shifts the whole duplicate in from the left edge. A second
+    # monitor is often not flush with the primary, and a panel hard against
+    # the edge reads as falling off it.
+    x = MARGIN + max(0, left_pad)
+    y = MARGIN
+    col_w = 0
+    for name in names:
+        h = heights.get(name)
+        if h is None:
+            dropped.append(name)
+            continue
+        w = widths.get(name, panel_w)
+        # Start a new column when this one is full. The column is as wide as
+        # the widest thing in it, so a grid does not overlap what follows.
+        if y + h + MARGIN > work_h:
+            x += col_w + GUTTER
+            y = MARGIN
+            col_w = 0
+        if x + w + MARGIN > work_w:
+            dropped.append(name)
+            continue
+        pos[name] = (x, y)
+        col_w = max(col_w, w)
+        y += h + GUTTER
+    return pos, dropped
+
+
+# What a second display gets a copy of: everything except the shell. The
+# shell is one real console window and cannot be in two places at once, so
+# a second frame would sit there empty.
+DUPLICATE = LEFT_STACK + RIGHT_STACK + OPTIONAL + ('Dock', 'Desktop', 'Folder')
+
 ORDER = ['Clock', 'CpuInfo', 'NetStat', 'RamWatcher', 'ConnInfo', 'TopList',
          'Disk', 'Ports', 'Gpu', 'Power',
          'Terminal', 'Folder', 'Dock', 'Desktop']
@@ -267,6 +343,23 @@ def build_ini(p, skin_path, root, disable=()):
                    f"ClickThrough={0 if name in INTERACTIVE else 1}\n"
                    f"KeepOnScreen=1\n"
                    f"LoadOrder={order}\n")
+
+    # The duplicate on a second display. Rainmeter loads a config once, so a
+    # copy needs a root of its own -- same skin files, different folder.
+    # Click-through throughout: the one to interact with is on the primary,
+    # and two live NetStat refresh buttons only invite confusion.
+    for order, name in enumerate(sorted(p.get('second', {}))):
+        x, y = p['second'][name]
+        out.append(rf"[{p['second_root']}\{name}]" "\n"
+                   f"Active=1\n"
+                   f"WindowX={x}\n"
+                   f"WindowY={y}\n"
+                   f"AlwaysOnTop=-2\n"
+                   f"Draggable=1\n"
+                   f"SnapEdges=1\n"
+                   f"ClickThrough=1\n"
+                   f"KeepOnScreen=0\n"
+                   f"LoadOrder={100 + order}\n")
     return '\n'.join(out)
 
 
@@ -287,6 +380,20 @@ if __name__ == '__main__':
                          + ', '.join(n.lower() for n in OPTIONAL))
     ap.add_argument('--drive-count', type=int, default=1,
                     help='fixed drives the Disk panel lists')
+    ap.add_argument('--second-pad', type=int, default=75,
+                    help='extra left inset for the duplicate, in logical px')
+    ap.add_argument('--second-scale', type=float, default=1.0,
+                    help='size multiplier the duplicate skins were built at')
+    ap.add_argument('--second-root', default='',
+                    help='config name for the duplicate (default: <root>-2)')
+    ap.add_argument('--second-w', type=int, default=0,
+                    help='logical width of a second display (0 = none)')
+    ap.add_argument('--second-h', type=int, default=0,
+                    help='logical height of its work area')
+    ap.add_argument('--second-x', type=int, default=0,
+                    help="its left edge relative to the primary's")
+    ap.add_argument('--second-y', type=int, default=0,
+                    help="its top edge relative to the primary's")
     ap.add_argument('--power-rows', type=int, default=5,
                     help='readings the Power panel can fill: 5 on a laptop, '
                          'fewer on a desktop with no battery')
@@ -307,6 +414,26 @@ if __name__ == '__main__':
     p = plan(a.screen_w, a.work_h, a.dock_count, a.desk_count, a.folder_count,
              names(a.panels, OPTIONAL), a.drive_count,
              names(a.off, LEFT_STACK + RIGHT_STACK), a.power_rows)
+
+    # A second display shows a copy of the panels, laid out for its own size.
+    # Not the primary's coordinates repeated: the screens are rarely the same
+    # shape, and here one is 1536 logical wide and the other 3440, so copying
+    # positions would huddle everything into a corner.
+    p['second'] = {}
+    p['second_root'] = a.second_root or (a.root + '-2')
+    if a.second_w > 0 and a.second_h > 0:
+        wanted = [n for n in DUPLICATE if n not in p['hidden']]
+        placed, dropped = plan_second(wanted, a.second_w, a.second_h,
+                                      a.drive_count, a.power_rows, a.second_scale,
+                                      {'Dock': (p['dock_cols'], p['dock_rows']),
+                                       'Desktop': (p['desk_cols'], p['desk_rows']),
+                                       'Folder': (p['folder_cols'], p['folder_rows'])},
+                                      a.second_pad)
+        for nm, (sx, sy) in placed.items():
+            p['second'][nm] = (a.second_x + sx, a.second_y + sy)
+        p['second_dropped'] = dropped
+        print(f'second display: {len(placed)} panel(s) duplicated'
+              + (f', no room for {", ".join(dropped)}' if dropped else ''))
 
     if a.plan_out:
         os.makedirs(os.path.dirname(os.path.abspath(a.plan_out)), exist_ok=True)
