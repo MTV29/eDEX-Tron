@@ -27,7 +27,7 @@ param([string]$Config = '')
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-function Row([string]$a, [string]$b) { '{0,-13}{1}' -f $a, $b }
+function Row([string]$a, [string]$b) { '{0,-22}{1}' -f $a, $b }
 
 $cfgPath = $Config
 if (-not $cfgPath) {
@@ -88,23 +88,35 @@ if ($list.Count -eq 0) {
 }
 
 foreach ($s in $list | Select-Object -First $rows) {
-    # "lastup" comes back as text like "3/10/2026 4:12:05 PM" or "-" when the
-    # sensor has never been up. Shorten it to something that fits the column.
-    $when = [string]$s.lastup
-    if (-not $when -or $when -eq '-') { $when = 'never' }
-    else {
+    # PRTG's "lastup" is display HTML, not a date: it comes back as
+    #   9/1/2023 2:59:31 AM <span class="percent">[1132 d ago]</span>
+    # which no date parser will take. Every column also has a _raw twin, and
+    # for a datetime that is an OLE automation date -- a plain number of days
+    # since 1899-12-30. Use that and do the arithmetic here.
+    $when = 'never'
+    $stamp = [datetime]::MinValue
+    $ole = 0.0
+    if ($s.lastup_raw -ne $null -and
+        [double]::TryParse([string]$s.lastup_raw, [ref]$ole) -and $ole -gt 0) {
+        try { $stamp = [datetime]::FromOADate($ole) } catch { }
+    }
+    if ($stamp -eq [datetime]::MinValue) {
+        # No usable raw value: fall back to the text with the markup stripped.
+        $text = ([string]$s.lastup) -replace '<[^>]+>', ''
+        $text = ($text -replace '\[.*?\]', '').Trim()
         $parsed = [datetime]::MinValue
-        if ([datetime]::TryParse($when, [ref]$parsed)) {
-            $ago = (Get-Date) - $parsed
-            $when = if ($ago.TotalDays -ge 1) { '{0:0}d {1:00}h' -f $ago.Days, $ago.Hours }
-                    elseif ($ago.TotalHours -ge 1) { '{0:0}h {1:00}m' -f $ago.Hours, $ago.Minutes }
-                    else { '{0:0}m' -f $ago.TotalMinutes }
-        }
+        if ($text -and [datetime]::TryParse($text, [ref]$parsed)) { $stamp = $parsed }
+    }
+    if ($stamp -ne [datetime]::MinValue) {
+        $ago = (Get-Date) - $stamp
+        $when = if ($ago.TotalDays -ge 1) { '{0:0}d {1:00}h' -f $ago.Days, $ago.Hours }
+                elseif ($ago.TotalHours -ge 1) { '{0:0}h {1:00}m' -f $ago.Hours, $ago.Minutes }
+                else { '{0:0}m' -f $ago.TotalMinutes }
     }
     $name = [string]$s.sensor
     $dev = [string]$s.device
     $label = if ($dev) { "$dev/$name" } else { $name }
-    if ($label.Length -gt 13) { $label = $label.Substring(0, 12) + '.' }
+    if ($label.Length -gt 21) { $label = $label.Substring(0, 20) + '.' }
     Row $label $when
 }
 
