@@ -115,9 +115,11 @@ foreach ($s in $list | Select-Object -First $rows) {
                 elseif ($ago.TotalHours -ge 1) { '{0:0}h {1:00}m' -f $ago.Hours, $ago.Minutes }
                 else { '{0:0}m' -f $ago.TotalMinutes }
     }
-    $name = [string]$s.sensor
-    $dev = [string]$s.device
-    $label = if ($dev) { "$dev/$name" } else { $name }
+    # The sensor name alone -- "A1391-Kioo Vikindu" -- not device/sensor. The
+    # sensors are named with their site code already, so prefixing the device
+    # repeated most of it and pushed the useful half off the end.
+    $label = ([string]$s.sensor).Trim()
+    if (-not $label) { $label = ([string]$s.device).Trim() }
     if ($label.Length -gt 34) { $label = $label.Substring(0, 33) + '.' }
     Row $label $when
 }

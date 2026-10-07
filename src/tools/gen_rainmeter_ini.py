@@ -247,7 +247,7 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
 
 
 def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
-                grids=None, left_pad=0, right=()):
+                grids=None, left_pad=0, right=(), prtg_rows=None):
     """Lay the panels out again on a second display.
 
     The second screen shows the same panels as the first -- a duplicate, not
@@ -269,7 +269,10 @@ def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
     heights['Power'] = int(POWER_BASE + POWER_ROW * max(1, power_rows))
     # Same mono rows as Power and Ports: the listed sensors plus the
     # '+N more' line.
-    heights['Prtg'] = int(POWER_BASE + POWER_ROW * (PRTG_ROWS + 1))
+    # Resolved here rather than as a default argument: PRTG_ROWS is defined
+    # below this function, and a default is evaluated at definition time.
+    if prtg_rows is None: prtg_rows = PRTG_ROWS
+    heights['Prtg'] = int(POWER_BASE + POWER_ROW * (max(1, prtg_rows) + 1))
     # The duplicate can be generated at a different size (gen_skins --scale),
     # so the planner has to measure the panels it is actually placing.
     if abs(scale - 1.0) > 1e-6:
@@ -419,6 +422,8 @@ if __name__ == '__main__':
                          + ', '.join(n.lower() for n in OPTIONAL))
     ap.add_argument('--drive-count', type=int, default=1,
                     help='fixed drives the Disk panel lists')
+    ap.add_argument('--prtg-rows', type=int, default=PRTG_ROWS,
+                    help='sensors the PRTG panel lists, from runtime/prtg.json')
     ap.add_argument('--second-pad', type=int, default=75,
                     help='extra left inset for the duplicate, in logical px')
     ap.add_argument('--second-scale', type=float, default=1.0,
@@ -468,7 +473,8 @@ if __name__ == '__main__':
                                       {'Dock': (p['dock_cols'], p['dock_rows']),
                                        'Desktop': (p['desk_cols'], p['desk_rows']),
                                        'Folder': (p['folder_cols'], p['folder_rows'])},
-                                      a.second_pad, SECOND_ONLY)
+                                      a.second_pad, SECOND_ONLY,
+                                      a.prtg_rows)
         for nm, (sx, sy) in placed.items():
             p['second'][nm] = (a.second_x + sx, a.second_y + sy)
         p['second_dropped'] = dropped

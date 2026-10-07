@@ -94,6 +94,19 @@ $monCb = [Relayout.Mon+MonEnum] {
 # away -- and inset from the left edge, because a second monitor is rarely
 # flush with the primary and a panel hard against the edge reads as falling
 # off it.
+# How many sensors the PRTG panel lists, so the layout reserves the right
+# height. It is set in runtime\prtg.json, which the panel reads at run time;
+# the planner has to be told the same number or it reserves space for the
+# default and the panel grows past it.
+$prtgRows = 10
+try {
+    $prtgCfg = Join-Path $Root 'runtime\prtg.json'
+    if (Test-Path $prtgCfg) {
+        $pj = Get-Content $prtgCfg -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($pj.rows -and [int]$pj.rows -gt 0) { $prtgRows = [int]$pj.rows }
+    }
+} catch { }
+
 $secondScale = 1.1
 $secondPad = 35
 $secondW = 0; $secondH = 0; $secondX = 0; $secondY = 0
@@ -179,7 +192,8 @@ $planArgs = @('--drive-count', $drives.Count, '--power-rows', $powerRows)
 if ($secondW -gt 0 -and $secondH -gt 0) {
     $planArgs += @('--second-w', $secondW, '--second-h', $secondH,
                    '--second-x', $secondX, '--second-y', $secondY,
-                   '--second-scale', $secondScale, '--second-pad', $secondPad)
+                   '--second-scale', $secondScale, '--second-pad', $secondPad,
+                   '--prtg-rows', $prtgRows)
 }
 if ($panels)    { $planArgs += @('--panels', ($panels -join ',')) }
 if ($offPanels) { $planArgs += @('--off', ($offPanels -join ',')) }
