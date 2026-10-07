@@ -247,7 +247,7 @@ def plan(screen_w, work_h, dock_n, desk_n, folder_n=0, panels=(), drives=1,
 
 
 def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
-                grids=None, left_pad=0):
+                grids=None, left_pad=0, right=()):
     """Lay the panels out again on a second display.
 
     The second screen shows the same panels as the first -- a duplicate, not
@@ -294,10 +294,34 @@ def plan_second(names, work_w, work_h, drives=1, power_rows=5, scale=1.0,
     # left_pad shifts the whole duplicate in from the left edge. A second
     # monitor is often not flush with the primary, and a panel hard against
     # the edge reads as falling off it.
+    # Anything in `right` is anchored to the top right corner and stacked
+    # downwards, out of the packing order entirely. A panel you glance at
+    # wants a fixed place to glance at; if it were packed with the rest its
+    # position would move every time another panel appeared or went away.
+    right_edge = work_w
+    ry = MARGIN
+    for name in right:
+        h = heights.get(name)
+        if h is None:
+            dropped.append(name)
+            continue
+        w = widths.get(name, panel_w)
+        if ry + h + MARGIN > work_h:
+            dropped.append(name)
+            continue
+        pos[name] = (work_w - w - MARGIN, ry)
+        right_edge = min(right_edge, work_w - w - MARGIN)
+        ry += h + GUTTER
+    # The packed columns stop short of whatever is anchored on the right.
+    if right_edge < work_w:
+        work_w = right_edge - GUTTER
+
     x = MARGIN + max(0, left_pad)
     y = MARGIN
     col_w = 0
     for name in names:
+        if name in right:
+            continue
         h = heights.get(name)
         if h is None:
             dropped.append(name)
@@ -438,7 +462,7 @@ if __name__ == '__main__':
                                       {'Dock': (p['dock_cols'], p['dock_rows']),
                                        'Desktop': (p['desk_cols'], p['desk_rows']),
                                        'Folder': (p['folder_cols'], p['folder_rows'])},
-                                      a.second_pad)
+                                      a.second_pad, SECOND_ONLY)
         for nm, (sx, sy) in placed.items():
             p['second'][nm] = (a.second_x + sx, a.second_y + sy)
         p['second_dropped'] = dropped
