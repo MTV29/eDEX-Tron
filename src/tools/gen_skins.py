@@ -731,7 +731,11 @@ def prtg(rows=10, interval=60, width=None):
     # Wider than the standard panel: a device/sensor pair plus how long it has
     # been down does not fit in a column sized for "VRAM 0.0/6.0G".
     return '{N}{N}'.replace('{N}', chr(10)).join([hdr,
-        header('PRTG Sensors', 'down', width=width), textwrap.dedent(f"""
+        # The right-hand caption is the refresh button: it re-runs the
+        # query rather than reloading the skin, so a click costs one API
+        # call and not a rebuild of the panel.
+        header('PRTG Sensors', 'refresh', width=width,
+               right_action='[!CommandMeasure MeasurePrtg "Run"]'), textwrap.dedent(f"""
     [MeasurePrtg]
     Measure=Plugin
     Plugin=RunCommand

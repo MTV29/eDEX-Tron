@@ -72,7 +72,7 @@ DISK_ROW = 26                # gen_skins disk(): one drive's row
 POWER_BASE = 4
 POWER_ROW = 23.5
 
-INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'Folder', 'NetStat'}
+INTERACTIVE = {'Terminal', 'Dock', 'Desktop', 'Folder', 'NetStat', 'Prtg'}
 DOCK_SHARE = 0.60            # the dock may take this much of the bottom band
 
 
@@ -383,8 +383,10 @@ def build_ini(p, skin_path, root, disable=()):
 
     # The duplicate on a second display. Rainmeter loads a config once, so a
     # copy needs a root of its own -- same skin files, different folder.
-    # Click-through throughout: the one to interact with is on the primary,
-    # and two live NetStat refresh buttons only invite confusion.
+    # Click-through, except for panels that have something to click. The
+    # duplicated readouts are a copy -- the one to interact with is on the
+    # primary -- but a second-display-only panel has no primary twin, so its
+    # own controls have to work where it is.
     for order, name in enumerate(sorted(p.get('second', {}))):
         x, y = p['second'][name]
         out.append(rf"[{p['second_root']}\{name}]" "\n"
@@ -394,7 +396,7 @@ def build_ini(p, skin_path, root, disable=()):
                    f"AlwaysOnTop=-2\n"
                    f"Draggable=1\n"
                    f"SnapEdges=1\n"
-                   f"ClickThrough=1\n"
+                   f"ClickThrough={0 if name in INTERACTIVE else 1}\n"
                    f"KeepOnScreen=0\n"
                    f"LoadOrder={100 + order}\n")
     return '\n'.join(out)
