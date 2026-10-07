@@ -154,14 +154,23 @@ foreach ($folder in 'Startup', 'Desktop', 'Programs') {
 # ------------------------------------------------------------------ rainmeter
 Write-Step 'Removing the Rainmeter HUD'
 Get-Process Rainmeter -ErrorAction SilentlyContinue | Stop-Process -Force
-$skinDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Rainmeter\Skins\eDEX-Tron'
-if (Test-Path $skinDir) { Remove-Item $skinDir -Recurse -Force; Write-Ok "Removed $skinDir" }
+# Both roots: a second display gets a duplicate in eDEX-Tron-2. Named
+# explicitly rather than matched with a wildcard, so a skin of the user's own
+# that happens to start with the same word is never caught by it.
+$skinRoot = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Rainmeter\Skins'
+foreach ($name in 'eDEX-Tron', 'eDEX-Tron-2') {
+    $skinDir = Join-Path $skinRoot $name
+    if (Test-Path $skinDir) { Remove-Item $skinDir -Recurse -Force; Write-Ok "Removed $skinDir" }
+}
 $rmIni = "$env:APPDATA\Rainmeter\Rainmeter.ini"
 if (Test-Path $rmIni) {
     # drop only our configs, leave any other skins the user has
     $kept = @(); $skip = $false
     foreach ($line in Get-Content $rmIni) {
-        if ($line -match '^\s*\[') { $skip = $line -match '^\s*\[eDEX-Tron\\' }
+        # -2 as well: [eDEX-Tron-2\Clock] does not match [eDEX-Tron\, so the
+        # duplicate's entries used to survive an uninstall and sit in
+        # Rainmeter.ini pointing at a folder that was no longer there.
+        if ($line -match '^\s*\[') { $skip = $line -match '^\s*\[eDEX-Tron(-\d+)?\\' }
         if (-not $skip) { $kept += $line }
     }
     $kept | Set-Content $rmIni -Encoding utf8

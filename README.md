@@ -279,7 +279,9 @@ remove them with `winget uninstall` if you like.
 
 ## Known limitations
 
-- Primary display only.
+- A second display gets a duplicate of the HUD, drawn larger; the shell
+  stays on the primary, being one real console window. Three or more
+  displays: only the largest of the others is used.
 - A small screen cannot fit every optional panel at once; Settings says which
   one missed out and `status` repeats it.
 - The Windhawk taskbar styling is manual.
