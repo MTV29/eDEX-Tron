@@ -961,7 +961,13 @@ static class EdexTron
             case "stop":   Stop();  break;
             case "watch":  Watch(); break;
             case "toggle": if (IsOn()) Stop(); else Start(); break;
-            case "boot":   BootScreen.Run(null, Accent(), Background(), Version); break;
+            case "boot":
+                // "boot demo" substitutes a generic user, host and address,
+                // so the screen can be recorded without showing whose it is.
+                BootScreen.Demo = argv.Length > 1 &&
+                                  argv[1].Trim().ToLowerInvariant() == "demo";
+                BootScreen.Run(null, Accent(), Background(), Version);
+                break;
             case "settings":
                 Application.Run(new SettingsForm(SettingsScript, ProjectRoot,
                                                  Accent(), Background(), Version));

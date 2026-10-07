@@ -161,7 +161,8 @@ static class BootScreen
     static void Collect(Action<Line> emit)
     {
         emit(new Line("INFO", OsName()));
-        emit(new Line("INFO", Environment.UserName + "@" + Environment.MachineName));
+        emit(new Line("INFO", Demo ? "edex@EDEX-PC"
+                                   : Environment.UserName + "@" + Environment.MachineName));
 
         emit(new Line("OK", "cpu: " + CpuName() + " (" +
                             Environment.ProcessorCount + " threads)"));
@@ -198,7 +199,7 @@ static class BootScreen
                     if (a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                         ip = a.Address.ToString();
                 if (ip.Length == 0) continue;
-                emit(new Line("OK", "link up: " + nic.Name + " " + ip +
+                emit(new Line("OK", "link up: " + nic.Name + " " + (Demo ? Mask(ip) : ip) +
                     (nic.Speed > 0 ? " at " + (nic.Speed / 1000000) + " Mb/s" : "")));
             }
             catch { }
@@ -474,6 +475,25 @@ static class BootScreen
                 g.DrawString("any key to skip", smallFont, dim, tx + 4, h - 70);
             }
         }
+    }
+
+    /// <summary>Recording mode: show the same boot, with nothing in it that
+    /// says whose machine this is.
+    ///
+    /// The log is the project's best demo and the one thing that cannot be
+    /// screenshotted safely, because it prints the login name, the machine
+    /// name and every address on the box. Painting over it afterwards means
+    /// chasing scrolling text frame by frame; substituting at the source is
+    /// one flag and cannot miss a frame.
+    /// </summary>
+    public static bool Demo;
+
+    /// <summary>An address of the same shape, on a documentation subnet.</summary>
+    static string Mask(string ip)
+    {
+        string[] part = ip.Split('.');
+        if (part.Length != 4) return "192.168.1.42";
+        return "192.168.1." + part[3];
     }
 
     public static void Run(Thread worker, Color accent, Color back, string version)
