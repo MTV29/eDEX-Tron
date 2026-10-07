@@ -95,7 +95,7 @@ $monCb = [Relayout.Mon+MonEnum] {
 # flush with the primary and a panel hard against the edge reads as falling
 # off it.
 $secondScale = 1.1
-$secondPad = 75
+$secondPad = 35
 $secondW = 0; $secondH = 0; $secondX = 0; $secondY = 0
 if ($monitors.Count -gt 1) {
     $primaryMon = $monitors | Where-Object { $_.Primary } | Select-Object -First 1
