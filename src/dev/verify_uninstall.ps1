@@ -107,6 +107,7 @@ function New-Snapshot {
     # Files and folders the theme creates, replaces or copies.
     $files = @(
         "$docs\Rainmeter\Skins\eDEX-Tron",
+        "$docs\Rainmeter\Skins\eDEX-Tron-2",
         "$roaming\Rainmeter\Rainmeter.ini",
         "$local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
         "$roaming\Code\User\settings.json",
@@ -114,8 +115,22 @@ function New-Snapshot {
         "$roaming\Microsoft\Windows\Start Menu\Programs\eDEX-Tron Theme.lnk",
         "$([Environment]::GetFolderPath('Desktop'))\eDEX-Tron Theme.lnk",
         "$([Environment]::GetFolderPath('Startup'))\eDEX-Tron Theme.lnk",
+        # The Startup shortcut is "eDEX-Tron.lnk"; the line above checks a
+        # name setup_autostart.ps1 does not create, so it could never fail.
+        "$([Environment]::GetFolderPath('Startup'))\eDEX-Tron.lnk",
+        # Installed assets, including a wallpaper per monitor.
+        "$local\eDEX-Tron",
         "$roaming\Microsoft\Windows\Fonts"
     )
+
+    # TranslucentTB: the theme rewrites its settings and keeps the original
+    # beside it, so both the file and the backup have to come back right.
+    $ttb = Get-AppxPackage -Name '*TranslucentTB*' -ErrorAction SilentlyContinue |
+           Select-Object -First 1
+    if ($ttb) {
+        $files += "$local\Packages\$($ttb.PackageFamilyName)\RoamingState\settings.json"
+        $files += "$local\Packages\$($ttb.PackageFamilyName)\RoamingState\settings.json.edex-backup"
+    }
     foreach ($f in $files) { $state["file: $f"] = Get-FileState $f }
 
     # Fonts the theme may install, by name rather than by folder listing.
