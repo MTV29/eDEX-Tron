@@ -37,6 +37,10 @@ class SettingsForm : Form
     // folder + behaviour
     TextBox folderBox;
     ComboBox fontBox;
+    ComboBox profileBox;
+    List<string> profileNames = new List<string>();
+    string profileToApply;        // set by the dropdown, read on Apply
+    string profileToSave, profileToDelete;
     CheckBox keyClickBox, hotkeysBox, bootBox, snapBox, altTabBox, autostartBox;
 
     Button applyButton, closeButton, dockButton;
@@ -190,6 +194,76 @@ class SettingsForm : Form
         return l;
     }
 
+    void Say(string text)
+    {
+        if (statusLabel != null) statusLabel.Text = text;
+    }
+
+    /// <summary>Fill the dropdown from what settings.ps1 reported.</summary>
+    void LoadProfiles()
+    {
+        profileNames = List("profiles");
+        string active = Get("profile");
+        profileBox.Items.Clear();
+        // The first row is whatever is on right now. It is the selection
+        // whenever the panels do not match a saved profile -- which is what
+        // settings.ps1 reports by clearing the name after a hand edit.
+        profileBox.Items.Add(active.Length > 0 ? "(current: " + active + ")" : "(unsaved layout)");
+        foreach (string n in profileNames) profileBox.Items.Add(n);
+        int at = active.Length > 0 ? profileNames.IndexOf(active) : -1;
+        profileBox.SelectedIndex = at >= 0 ? at + 1 : 0;
+    }
+
+    /// <summary>A name that is not taken yet, for the Save dialog to start on.</summary>
+    string SuggestProfileName()
+    {
+        string active = Get("profile");
+        if (active.Length > 0) return active;
+        foreach (string candidate in new[] { "work", "gaming", "minimal" })
+            if (!profileNames.Contains(candidate)) return candidate;
+        return "profile" + (profileNames.Count + 1);
+    }
+
+    /// <summary>A one-line prompt. WinForms has no InputBox, and pulling in
+    /// Microsoft.VisualBasic for one would be a reference for a text box.</summary>
+    string Ask(string prompt, string initial)
+    {
+        using (var dlg = new Form())
+        {
+            dlg.Text = "eDEX-Tron";
+            dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+            dlg.StartPosition = FormStartPosition.CenterParent;
+            dlg.MinimizeBox = false; dlg.MaximizeBox = false;
+            dlg.ClientSize = new Size(380, 116);
+            dlg.BackColor = back; dlg.ForeColor = accent;
+
+            var lbl = new Label { Text = prompt, Location = new Point(14, 14),
+                                  AutoSize = true, ForeColor = accent, BackColor = back };
+            var box = new TextBox { Text = initial, Location = new Point(14, 40),
+                                    Size = new Size(352, 22),
+                                    BackColor = Color.FromArgb(16, 20, 28),
+                                    ForeColor = accent, BorderStyle = BorderStyle.FixedSingle };
+            var ok = new Button { Text = "OK", DialogResult = DialogResult.OK,
+                                  Location = new Point(196, 76), Size = new Size(80, 26),
+                                  FlatStyle = FlatStyle.Flat, BackColor = back, ForeColor = accent };
+            var no = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel,
+                                  Location = new Point(286, 76), Size = new Size(80, 26),
+                                  FlatStyle = FlatStyle.Flat, BackColor = back, ForeColor = accent };
+            dlg.Controls.AddRange(new Control[] { lbl, box, ok, no });
+            dlg.AcceptButton = ok; dlg.CancelButton = no;
+            box.SelectAll();
+            if (dlg.ShowDialog(this) != DialogResult.OK) return null;
+
+            string name = box.Text.Trim();
+            // The name becomes a JSON key and a command-line argument.
+            if (name.Length == 0) return null;
+            foreach (char c in new[] { '"', '\'', '`', '$', ';', '|', '&' })
+                name = name.Replace(c.ToString(), "");
+            name = name.Trim();
+            return name.Length > 0 ? name : null;
+        }
+    }
+
     Label Note(string text, int x, int y)
     {
         var l = new Label();
@@ -312,6 +386,53 @@ class SettingsForm : Form
         gridBox = Check("Grid on the wallpaper", On("grid", false), 250, y + 3, null, "grid");
         y += 40;
 
+        Heading("Layout profiles", y); y += 28;
+        profileBox = new ComboBox();
+        profileBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        profileBox.FlatStyle = FlatStyle.Flat;
+        profileBox.Location = new Point(20, y);
+        profileBox.Size = new Size(240, 22);
+        profileBox.BackColor = Color.FromArgb(16, 20, 28);
+        profileBox.ForeColor = accent;
+        LoadProfiles();
+        profileBox.SelectedIndexChanged += (s2, a2) =>
+        {
+            int i = profileBox.SelectedIndex;
+            // Index 0 is the unsaved state, which is not something to apply.
+            profileToApply = (i > 0 && i - 1 < profileNames.Count) ? profileNames[i - 1] : null;
+            if (profileToApply != null) touched.Add("profile");
+        };
+        tips.SetToolTip(profileBox, "A named set of panels -- switch the whole layout at once");
+        Controls.Add(profileBox);
+
+        Flat("Save as", 270, y - 2, 80, (s2, a2) =>
+        {
+            string name = Ask("Save the panels that are on now as:", SuggestProfileName());
+            if (name == null) return;
+            profileToSave = name;
+            touched.Add("profile");
+            Say("Will save profile \"" + name + "\" when you press Apply.");
+        });
+        Flat("Delete", 358, y - 2, 80, (s2, a2) =>
+        {
+            int i = profileBox.SelectedIndex;
+            if (i <= 0 || i - 1 >= profileNames.Count)
+            {
+                Say("Pick a saved profile to delete first.");
+                return;
+            }
+            string name = profileNames[i - 1];
+            if (MessageBox.Show("Delete the profile \"" + name + "\"?", "eDEX-Tron",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            profileToDelete = name;
+            profileToApply = null;
+            touched.Add("profile");
+            Say("Will delete profile \"" + name + "\" when you press Apply.");
+        });
+        y += 30;
+        Note("Saving stores the panels below; switching puts them all back at once.",
+             20, y); y += 26;
+
         Heading("Extra panels", y); y += 28;
         var optional = List("optional");
         for (int i = 0; i < optional.Count; i++)
@@ -320,9 +441,10 @@ class SettingsForm : Form
             bool fits = !noRoom.Contains(key);
             extraBoxes[key] = Check(key.ToUpperInvariant() + (fits ? "" : "  (no room)"),
                                     panelsOn.Contains(key),
-                                    20 + i * 190, y, Describe(key), "panels");
+                                    20 + (i % 3) * 190, y + (i / 3) * 24,
+                                    Describe(key), "panels");
         }
-        y += 24;
+        y += ((optional.Count + 2) / 3) * 24;
         if (noRoom.Count > 0)
             Note("No room: on, but this screen cannot fit it -- turn one below off.",
                  20, y + 2);
@@ -382,8 +504,8 @@ class SettingsForm : Form
         Controls.Add(fontBox);
         fontNames = haveFonts;
         Note(haveFonts.Contains("unitedsans")
-             ? "Fira ships with eDEX-Tron; United Sans comes from your eDEX-UI install."
-             : "Install eDEX-UI and re-run setup to add its own United Sans.",
+             ? "Fira ships; United Sans is yours"
+             : "Install eDEX-UI for United Sans",
              276, y + 3);
         y += 36;
 
@@ -446,22 +568,34 @@ class SettingsForm : Form
         if (changed("icon") && iconHex != Get("icon")) args.Append(" -IconColor " + iconHex);
         if (changed("grid") && gridBox.Checked != On("grid", false)) args.Append(Switch("Grid", gridBox.Checked));
 
+        // A profile switch sets the panels itself; sending the boxes as well
+        // would overwrite the profile with whatever the window happened to
+        // be showing before the switch.
+        bool profileDrivesPanels = profileToApply != null;
         var wanted = new List<string>();
         foreach (var kv in extraBoxes) if (kv.Value.Checked) wanted.Add(kv.Key);
         wanted.Sort();
         var was = List("panels"); was.Sort();
-        if (changed("panels") && string.Join(",", wanted.ToArray()) != string.Join(",", was.ToArray()))
+        if (!profileDrivesPanels && changed("panels") && string.Join(",", wanted.ToArray()) != string.Join(",", was.ToArray()))
             args.Append(" -Panels " + (wanted.Count > 0 ? string.Join(",", wanted.ToArray()) : "none"));
 
         var offNow = new List<string>();
         foreach (var kv in standardBoxes) if (!kv.Value.Checked) offNow.Add(kv.Key);
         offNow.Sort();
         var offWas = List("off"); offWas.Sort();
-        if (changed("off") && string.Join(",", offNow.ToArray()) != string.Join(",", offWas.ToArray()))
+        if (!profileDrivesPanels && changed("off") && string.Join(",", offNow.ToArray()) != string.Join(",", offWas.ToArray()))
             args.Append(" -Off " + (offNow.Count > 0 ? string.Join(",", offNow.ToArray()) : "none"));
 
         if (changed("folder") && folderBox.Text.Trim() != Get("folderraw"))
             args.Append(" -Folder \"" + folderBox.Text.Trim() + "\"");
+
+        // Profiles first on the command line: settings.ps1 saves what is on
+        // now before any switch, and a -Panels further along still wins, so
+        // "save this, then switch to that" works in one press.
+        if (profileToSave != null) args.Append(" -SaveProfile \"" + profileToSave + "\"");
+        if (profileToDelete != null) args.Append(" -DeleteProfile \"" + profileToDelete + "\"");
+        if (profileToApply != null && profileToApply != Get("profile"))
+            args.Append(" -Profile \"" + profileToApply + "\"");
 
         if (changed("font") && fontBox.SelectedIndex >= 0
             && fontBox.SelectedIndex < fontNames.Count

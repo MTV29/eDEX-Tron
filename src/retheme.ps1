@@ -72,7 +72,8 @@ if (-not $cfg.accent)     { $cfg.accent = '#aacfd1' }
 if (-not $cfg.background) { $cfg.background = '#05080d' }
 if (-not $cfg.icon)       { $cfg.icon = $cfg.accent }
 if ($null -eq $cfg.grid)  { $cfg.grid = $false }
-$cfg | ConvertTo-Json | Set-Content $cfgPath -Encoding utf8
+# -Depth 6: the default of 2 flattens theme.json's nested "profiles".
+$cfg | ConvertTo-Json -Depth 6 | Set-Content $cfgPath -Encoding utf8
 "theme.json -> accent $($cfg.accent)  background $($cfg.background)  icon $($cfg.icon)  grid $($cfg.grid)"
 
 function Invoke-Py {

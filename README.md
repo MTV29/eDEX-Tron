@@ -37,7 +37,23 @@ affiliated with or endorsed by eDEX-UI. See
   and is put back if anything moves it.
 - **Dock** of your apps, and a **Desktop** panel that mirrors your Desktop
   folder and updates itself. Real desktop icons are hidden while the theme is on.
-- **Boot screen** — eDEX's startup log when the theme comes up, reporting this
+- **Layout profiles** — a named set of panels you can switch between: one for
+gaming, one for working, whatever you like. **Save as** stores whichever panels
+are on at that moment, and picking a profile puts them all back at once — the
+planner then refits them to this screen, so a profile saved on a big monitor
+still does something sensible on a small one.
+
+Profiles hold the panel choice and nothing else. A profile that also carried
+your colours or your folder path would make switching one a bigger surprise
+than the name suggests. Change the panels by hand and the name clears, because
+what is on screen is no longer the profile it claims to be.
+
+```bash
+powershell -File src	ools\settings.ps1 -SaveProfile gaming
+powershell -File src	ools\settings.ps1 -Profile work
+```
+
+**Boot screen** — eDEX's startup log when the theme comes up, reporting this
   machine's own hardware, drives, services and uptime rather than a script.
 - **Settings window** — colours, which panels you want, the folder panel and
   every switch, without editing a file.

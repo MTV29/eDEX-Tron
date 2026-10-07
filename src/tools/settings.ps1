@@ -33,6 +33,12 @@ param(
     # Which typeface set the HUD uses. 'unitedsans' needs eDEX-UI installed
     # for its commercial typeface; 'fira' ships with the project.
     [ValidateSet('auto', 'unitedsans', 'fira', 'windows')][string]$Font,
+    # Layout profiles: a named set of panels to switch between, e.g. one for
+    # gaming and one for working. -Profile applies one, -SaveProfile stores
+    # whatever is on now under that name, -DeleteProfile removes one.
+    [string]$Profile,
+    [string]$SaveProfile,
+    [string]$DeleteProfile,
     # Comma-separated, or 'none' to clear. Unset means "leave alone".
     [string]$Panels,
     [string]$Off,
@@ -98,6 +104,19 @@ function Get-AvailableFonts {
     ($sets | Sort-Object) -join ','
 }
 
+# Profiles live in theme.json as an object of name -> { panels, off }. They
+# deliberately hold only the panel choice: that is what "a gaming layout" means
+# here, and a profile that also carried colours or a folder path would make
+# switching one a bigger surprise than the name suggests.
+function Get-Profiles($cfg) {
+    if ($cfg.PSObject.Properties['profiles'] -and $cfg.profiles) { return $cfg.profiles }
+    [pscustomobject]@{}
+}
+
+function Get-ProfileNames($cfg) {
+    @(Get-Profiles $cfg | ForEach-Object { $_.PSObject.Properties.Name }) | Sort-Object
+}
+
 function Test-Autostart {
     Test-Path (Join-Path ([Environment]::GetFolderPath('Startup')) 'eDEX-Tron Theme.lnk')
 }
@@ -125,6 +144,8 @@ if ($Get) {
     "font=$(if ($cfg.font) { ([string]$cfg.font).ToLower() } else { 'auto' })"
     "fonts=auto,unitedsans,fira,windows"
     "fontavailable=$(Get-AvailableFonts)"
+    "profile=$(if ($cfg.profile) { $cfg.profile } else { '' })"
+    "profiles=$((Get-ProfileNames $cfg) -join ',')"
     "panels=$(($panelList | ForEach-Object { $_.ToLower() }) -join ',')"
     "off=$((@($cfg.off) | Where-Object { $_ } | ForEach-Object { $_.ToLower() }) -join ',')"
     "noroom=$($noRoom -join ',')"
@@ -161,10 +182,63 @@ if ($Font) {
     Set-Key $cfg 'font' $Font.ToLower()
     $layoutChanged = $true
 }
+# --- profiles ---------------------------------------------------------------
+# Order matters: -SaveProfile captures what is on *now*, before any -Panels or
+# -Profile on the same command line changes it; -Profile then applies a stored
+# set, and an explicit -Panels after that still wins, so the dialog can switch
+# profile and adjust in one go.
+if ($SaveProfile) {
+    $profiles = Get-Profiles $cfg
+    $current = [pscustomobject]@{
+        panels = @(if ($null -ne $cfg.panels) { $cfg.panels } else { $optional })
+        off    = @(@($cfg.off) | Where-Object { $_ })
+    }
+    if ($profiles.PSObject.Properties[$SaveProfile]) { $profiles.$SaveProfile = $current }
+    else { $profiles | Add-Member -NotePropertyName $SaveProfile -NotePropertyValue $current }
+    Set-Key $cfg 'profiles' $profiles
+    Set-Key $cfg 'profile' $SaveProfile
+    $layoutChanged = $true
+    "profile saved: $SaveProfile"
+}
+
+if ($DeleteProfile) {
+    $profiles = Get-Profiles $cfg
+    if (-not $profiles.PSObject.Properties[$DeleteProfile]) {
+        throw "no such profile: $DeleteProfile"
+    }
+    $profiles.PSObject.Properties.Remove($DeleteProfile)
+    Set-Key $cfg 'profiles' $profiles
+    if ($cfg.profile -eq $DeleteProfile) { Set-Key $cfg 'profile' '' }
+    $layoutChanged = $true
+    "profile deleted: $DeleteProfile"
+}
+
+if ($Profile) {
+    $profiles = Get-Profiles $cfg
+    if (-not $profiles.PSObject.Properties[$Profile]) {
+        throw ("no such profile: $Profile (have: " + ((Get-ProfileNames $cfg) -join ', ') + ")")
+    }
+    $wanted = $profiles.$Profile
+    # A profile written by a version that flattened the arrays comes back as
+    # one space-separated string; accept that as well as a real array.
+    function Expand-List($v) {
+        if ($null -eq $v) { return @() }
+        @($v) | ForEach-Object { $_ -split '[ ,]+' } | Where-Object { $_ }
+    }
+    Set-Key $cfg 'panels' @(Expand-List $wanted.panels | Where-Object { $optional -contains $_ })
+    Set-Key $cfg 'off'    @(Expand-List $wanted.off    | Where-Object { $standard -contains $_ })
+    Set-Key $cfg 'profile' $Profile
+    $layoutChanged = $true
+    "profile applied: $Profile"
+}
+
 if ($PSBoundParameters.ContainsKey('Panels')) {
     $list = @(Split-List $Panels | Where-Object { $optional -contains $_ })
     Set-Key $cfg 'panels' $list
     $layoutChanged = $true
+    # Changing the panels by hand means the layout is no longer the profile it
+    # claims to be. Say so rather than quietly drifting from the stored set.
+    if (-not $Profile -and -not $SaveProfile -and $cfg.profile) { Set-Key $cfg 'profile' '' }
 }
 if ($PSBoundParameters.ContainsKey('Off')) {
     $list = @(Split-List $Off | Where-Object { $standard -contains $_ })
@@ -183,7 +257,10 @@ foreach ($pair in @(@('keyclick', $KeyClick), @('hotkeys', $Hotkeys),
 # Colours are written by retheme.ps1, which owns the defaults; everything else
 # is written here. Save before rebuilding so the generators read the new values.
 if ($layoutChanged -or $toggleChanged) {
-    $cfg | ConvertTo-Json | Set-Content $cfgPath -Encoding utf8
+    # -Depth matters: the default of 2 flattens "profiles" (an object of
+    # objects of arrays) into space-joined strings, silently and without an
+    # error, and the file only looks wrong the next time it is read back.
+    $cfg | ConvertTo-Json -Depth 6 | Set-Content $cfgPath -Encoding utf8
     'theme.json saved'
 }
 
