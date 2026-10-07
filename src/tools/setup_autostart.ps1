@@ -34,7 +34,11 @@ function Set-Shortcut($folder, $name, $target, $arguments = '') {
 # One shortcut to the launcher rather than one per helper: "start" brings up
 # Rainmeter, TranslucentTB, the shell and the hidden desktop icons together, so
 # the theme comes back in one consistent state.
-$launcher = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'eDEX-Tron\eDEX-Tron.exe'
+# Derived from where this script is, not from a fixed folder: the shortcut
+# must point at the copy of the launcher it was installed from. Hard-coding
+# Documents meant a clone anywhere else installed a Startup shortcut aimed
+# at a different install, or at nothing at all.
+$launcher = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'eDEX-Tron.exe'
 if (Test-Path $launcher) {
     # Startup: bring the theme up at login.
     Set-Shortcut $startup 'eDEX-Tron' $launcher 'start'

@@ -203,7 +203,13 @@ def furniture(img, accent):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('--out', default='assets/icon')
+    # Resolved against the project, not the working directory: setup runs
+    # from wherever Task Scheduler started it, and a relative default sent
+    # the icon to C:\Windows\System32\assets, where it failed to write
+    # and the install carried on with the bundled icon instead.
+    p.add_argument('--out', default=os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        'assets', 'icon'))
     p.add_argument('--theme', default=os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         'themes', 'edex', 'tron.json'))  # bundled; no eDEX-UI install needed

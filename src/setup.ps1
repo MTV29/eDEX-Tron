@@ -50,11 +50,17 @@ Write-Host ''
 Write-Host "  eDEX-Tron $version  ::  setup" -ForegroundColor Cyan
 Write-Host '  a Windows desktop theme based on eDEX-UI by Gabriel Saillard' -ForegroundColor DarkCyan
 
-# The helper scripts that Rainmeter and the launcher call look for the
-# project in this exact place.
-$expected = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'eDEX-Tron'
-if ((Resolve-Path $Root).Path.TrimEnd('\') -ne $expected.TrimEnd('\')) {
-    Fail "eDEX-Tron must live in $expected (it is in $Root). Move or clone it there and run this again."
+# Setup used to insist the project sat in the Documents folder. Nothing in
+# the install path needs that any more: the launcher bakes in its own
+# location at build time, the skins are generated with real paths, and the
+# Startup shortcut is derived from where setup_autostart.ps1 itself is. A
+# clone works wherever you put it, which is what the clean-machine test
+# needs too.
+#
+# A quote or a semicolon in the path would still break the command lines the
+# skins and shortcuts are built from, so that is worth refusing.
+if ($Root -match '[";]') {
+    Fail "The project path contains a quote or a semicolon ($Root). Move it somewhere simpler and run this again."
 }
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Fail 'winget (App Installer) is required. Install "App Installer" from the Microsoft Store, then run this again.'
