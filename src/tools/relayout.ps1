@@ -90,7 +90,7 @@ $monCb = [Relayout.Mon+MonEnum] {
 }
 [void][Relayout.Mon]::EnumDisplayMonitors([IntPtr]::Zero, [IntPtr]::Zero, $monCb, [IntPtr]::Zero)
 
-# The duplicate is drawn 10% larger -- a second screen is usually further
+# The duplicate is drawn 27% larger -- a second screen is usually further
 # away -- and inset from the left edge, because a second monitor is rarely
 # flush with the primary and a panel hard against the edge reads as falling
 # off it.
@@ -107,7 +107,7 @@ try {
     }
 } catch { }
 
-$secondScale = 1.1
+$secondScale = 1.27
 $secondPad = 35
 $secondW = 0; $secondH = 0; $secondX = 0; $secondY = 0
 if ($monitors.Count -gt 1) {
