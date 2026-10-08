@@ -48,7 +48,7 @@ static class EdexTron
     // Every skin in the suite, in the order gen_rainmeter_ini.py loads them.
     static readonly string[] Configs = {
         "Clock", "CpuInfo", "NetStat", "RamWatcher", "ConnInfo", "TopList",
-        "Disk", "Ports", "Gpu", "Terminal", "Folder", "Dock", "Desktop",
+        "Disk", "Ports", "Gpu", "Power", "Terminal", "Folder", "Dock", "Desktop",
     };
 
     // ---------------------------------------------------------------- win32 ---
@@ -826,6 +826,47 @@ static class EdexTron
     // Everything that can be put right without reinstalling, in the order that
     // fixes the most: rebuild the layout for whatever the screen is now, bring
     // back anything that has died, and put the shell and the icons back.
+    /// <summary>Skins deployed, but nothing telling Rainmeter to load them.
+    ///
+    /// Rainmeter owns Rainmeter.ini and rewrites it as it pleases: reinstalling
+    /// or repairing it resets that file to its defaults, which leaves every
+    /// skin sitting in the Skins folder with no entry referring to it. The HUD
+    /// then does not appear and nothing anywhere reports an error -- the skins
+    /// are present, Rainmeter is running, and it has simply never been told.
+    ///
+    /// Returns a description when that is the case, null otherwise.
+    /// </summary>
+    static string OrphanedSkins()
+    {
+        try
+        {
+            string skins = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                @"Rainmeter\Skins\eDEX-Tron");
+            if (!Directory.Exists(skins)) return null;      // nothing deployed yet
+            int onDisk = 0;
+            foreach (string d in Directory.GetDirectories(skins))
+                if (!Path.GetFileName(d).StartsWith("@")) onDisk++;
+            if (onDisk == 0) return null;
+
+            string ini = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Rainmeter\Rainmeter.ini");
+            int listed = 0;
+            if (File.Exists(ini))
+            {
+                // ReadAllLines detects the BOM: Rainmeter rewrites this file as
+                // UTF-16LE, and reading it as bytes would find no matches at all.
+                foreach (string line in File.ReadAllLines(ini))
+                    if (line.TrimStart().StartsWith("[eDEX-Tron",
+                            StringComparison.OrdinalIgnoreCase)) listed++;
+            }
+            if (listed > 0) return null;
+            return onDisk + " skin(s) deployed, none listed in Rainmeter.ini";
+        }
+        catch { return null; }
+    }
+
     static string Repair()
     {
         var log = new StringBuilder();
@@ -836,6 +877,14 @@ static class EdexTron
             log.AppendLine("HUD was not running - starting it");
             StartCore();
             Thread.Sleep(2000);
+        }
+
+        string orphaned = OrphanedSkins();
+        if (orphaned != null)
+        {
+            log.AppendLine("Rainmeter's config does not mention the HUD (" + orphaned + ").");
+            log.AppendLine("Its settings were most likely reset by reinstalling or");
+            log.AppendLine("repairing Rainmeter. Putting the config back.");
         }
 
         log.AppendLine("Rebuilding the layout for this screen...");
@@ -884,6 +933,14 @@ static class EdexTron
         sb.AppendLine("Taskbar (TranslucentTB): " + (Running("TranslucentTB") ? "running" : "stopped"));
         sb.AppendLine("Background tasks: " + (WatcherRunning() ? "running" : "stopped"));
         sb.AppendLine("Shell window: " + (FindShell() != IntPtr.Zero ? "in frame" : "closed"));
+
+        string orphaned = OrphanedSkins();
+        if (orphaned != null)
+        {
+            sb.AppendLine();
+            sb.AppendLine("PROBLEM: " + orphaned + ".");
+            sb.AppendLine("Rainmeter's settings were reset; run `eDEX-Tron.exe repair`.");
+        }
 
         string noRoom = PlanList("no_room");
         if (noRoom.Length > 0)
